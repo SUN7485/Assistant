@@ -10,6 +10,8 @@ const TZ = 'Africa/Cairo'
 const L = 'ar-EG-u-nu-latn'
 export const today = () => new Intl.DateTimeFormat('en-CA', { timeZone: TZ }).format(new Date())
 export const thisMonth = () => today().slice(0, 7)
+/** The Cairo day of a stored time. */
+export const dayOf = (ts: string) => new Intl.DateTimeFormat('en-CA', { timeZone: TZ }).format(new Date(ts))
 export const daysAgo = (n: number) => {
   const d = new Date(today() + 'T12:00:00Z')
   d.setUTCDate(d.getUTCDate() - n)

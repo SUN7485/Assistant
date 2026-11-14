@@ -34,6 +34,16 @@ insert into attendance (group_id, student_id, day, status, recorded_by) values
 insert into payments (student_id, month, amount, recorded_by) values
   ('00000000-0000-0000-0000-0000000000c1', '2026-11', 300, '00000000-0000-0000-0000-0000000000a1');
 
+-- ---------- one manager only ----------
+insert into auth.users (id, email, aud, role) values
+  ('00000000-0000-0000-0000-0000000000a2', 'a2@test.invalid', 'authenticated', 'authenticated');
+do $$
+begin
+  insert into profiles (id, role, full_name, phone) values ('00000000-0000-0000-0000-0000000000a2', 'admin', 'Second Admin', '01000000009');
+  raise exception 'a second manager was made';
+exception when unique_violation then null;
+end $$;
+
 -- ---------- student one ----------
 set local role authenticated;
 set local request.jwt.claims = '{"sub":"00000000-0000-0000-0000-0000000000c1","role":"authenticated"}';
@@ -127,6 +137,25 @@ begin
     insert into grades (submission_id, correct, wrong) values ('00000000-0000-0000-0000-0000000000f2', 10, 0);
     raise exception 'teacher graded another group';
   exception when insufficient_privilege then null; end;
+
+  begin
+    insert into attendance (group_id, student_id, day, status) values ('00000000-0000-0000-0000-0000000000d1', '00000000-0000-0000-0000-0000000000c2', '2026-11-02', 'absent');
+    raise exception 'teacher marked another group''s student under their own group';
+  exception when insufficient_privilege then null; end;
+
+  begin
+    update grades set graded_by = '00000000-0000-0000-0000-0000000000b2' where submission_id = '00000000-0000-0000-0000-0000000000f1';
+    raise exception 'teacher graded under another teacher''s name';
+  exception when insufficient_privilege then null; end;
+
+  begin
+    update submissions set student_id = '00000000-0000-0000-0000-0000000000c2' where id = '00000000-0000-0000-0000-0000000000f1';
+    raise exception 'teacher moved a solution to another student';
+  exception when raise_exception then null; end;
+
+  delete from assignments where id = '00000000-0000-0000-0000-0000000000e1';
+  get diagnostics n = row_count;
+  assert n = 0, 'teacher deleted homework (and its grades with it)';
 end $$;
 
 -- ---------- teacher two: no permissions ticked ----------

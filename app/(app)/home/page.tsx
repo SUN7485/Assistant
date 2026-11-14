@@ -11,7 +11,7 @@ export default async function Home() {
     sb.from('profiles').select('id', { count: 'exact', head: true }).eq('role', 'teacher'),
     sb.from('groups').select('id', { count: 'exact', head: true }),
     sb.from('submissions').select('id', { count: 'exact', head: true }).eq('status', 'new'),
-    sb.from('payments').select('student_id').eq('month', month),
+    sb.from('payments').select('student_id, amount').eq('month', month),
     sb.from('attendance').select('group_id, student_id, day, status').gte('day', daysAgo(45)).order('day', { ascending: false }),
     sb.from('submissions').select('student_id, grades(correct, wrong)').eq('status', 'reviewed'),
   ])
@@ -19,7 +19,7 @@ export default async function Home() {
   const paidIds = new Set((paid.data ?? []).map((p) => p.student_id))
   const unpaid = ss.filter((s) => !paidIds.has(s.id))
   const due = ss.reduce((t, s) => t + s.monthly_fee, 0)
-  const got = ss.filter((s) => paidIds.has(s.id)).reduce((t, s) => t + s.monthly_fee, 0)
+  const got = (paid.data ?? []).reduce((t, p) => t + p.amount, 0)
 
   // last class of each group
   const rows = att.data ?? []

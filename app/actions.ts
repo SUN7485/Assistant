@@ -36,6 +36,7 @@ export async function login(fd: FormData) {
   if (!PHONE.test(phone)) back('/login', 'رقم الموبايل لازم يكون 11 رقم ويبدأ بـ 01', true)
   const sb = await db()
   const { error } = await sb.auth.signInWithPassword({ email: loginEmail(phone), password: String(fd.get('password') ?? '') })
+  if (error?.status === 429) back('/login', 'ناس كتير بتدخل دلوقتي. استنى دقيقة وجرّب تاني', true)
   if (error) back('/login', 'الرقم أو كلمة السر غلط', true)
   redirect('/')
 }
@@ -49,8 +50,8 @@ export async function logout() {
 /** First run only: makes the manager's account while there is no manager yet. */
 export async function setup(fd: FormData) {
   const admin = adminDb()
-  const { count } = await admin.from('profiles').select('id', { count: 'exact', head: true }).eq('role', 'admin')
-  if (count) redirect('/login')
+  const { count, error } = await admin.from('profiles').select('id', { count: 'exact', head: true }).eq('role', 'admin')
+  if (error || count) redirect('/login')
   const phone = str(fd, 'phone'), password = String(fd.get('password') ?? '')
   if (password.length < 8) back('/setup', 'كلمة سر المدير لازم تكون 8 حروف أو أرقام على الأقل', true)
   const err = await createAccount(phone, password, { role: 'admin', full_name: str(fd, 'name') })
@@ -147,11 +148,11 @@ export async function addAssignment(fd: FormData) {
 export async function saveAttendance(fd: FormData) {
   const gid = str(fd, 'group'), day = str(fd, 'day')
   const path = `/attendance?g=${gid}&d=${day}`
-  const { sb } = await staffOnly((me) => can(me, 'attendance'), path)
+  const { sb, me } = await staffOnly((me) => can(me, 'attendance'), path)
   if (!isDay(day) || day > today()) back(path, 'اختار يوم صحيح ومش في المستقبل', true)
   const rows = [...fd.entries()]
     .filter(([k, v]) => k.startsWith('s_') && ['present', 'late', 'absent'].includes(String(v)))
-    .map(([k, v]) => ({ group_id: gid, student_id: k.slice(2), day, status: String(v) }))
+    .map(([k, v]) => ({ group_id: gid, student_id: k.slice(2), day, status: String(v), recorded_by: me.id }))
   if (!rows.length) back(path, 'مفيش طلاب في المجموعة دي', true)
   const { error } = await sb.from('attendance').upsert(rows, { onConflict: 'group_id,student_id,day' })
   if (error) back(path, 'الحضور متحفظش: ' + error.message, true)

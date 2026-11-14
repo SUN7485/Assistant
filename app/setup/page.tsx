@@ -6,8 +6,8 @@ import { Submit } from '@/components/Submit'
 export const dynamic = 'force-dynamic'
 
 export default async function Setup() {
-  const { count } = await adminDb().from('profiles').select('id', { count: 'exact', head: true }).eq('role', 'admin')
-  if (count) redirect('/login')
+  const { count, error } = await adminDb().from('profiles').select('id', { count: 'exact', head: true }).eq('role', 'admin')
+  if (error || count) redirect('/login')
   return (
     <main className="wrap login">
       <div className="hero">

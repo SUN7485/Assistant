@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { can, need, isStaff } from '@/lib/me'
 import { addAssignment, addGroup, addStudent } from '../../actions'
 import { Submit } from '@/components/Submit'
-import { attendanceOf, average, fDay, fMonth, level, pct, thisMonth } from '@/lib/util'
+import { attendanceOf, average, dayOf, fDay, fMonth, level, pct, thisMonth } from '@/lib/util'
 
 export default async function Groups({ searchParams }: { searchParams: Promise<{ g?: string }> }) {
   const { sb, me } = await need(isStaff)
@@ -116,7 +116,7 @@ export default async function Groups({ searchParams }: { searchParams: Promise<{
           <ul className="list">
             {assignments.map((w) => (
               <li key={w.id}>
-                <div><b>{w.title}</b><div className="muted small">{w.questions} سؤال · {fDay(w.created_at.slice(0, 10))}</div></div>
+                <div><b>{w.title}</b><div className="muted small">{w.questions} سؤال · {fDay(dayOf(w.created_at))}</div></div>
                 <span className="chip">{(work ?? []).filter((x) => x.assignment_id === w.id).length} من {students?.length ?? 0} بعتوا الحل</span>
               </li>
             ))}
