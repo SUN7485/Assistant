@@ -18,7 +18,9 @@ Built with Next.js (on Vercel) and Supabase (database, logins, photo storage). S
 
 ### 1. Supabase: database, logins, photos
 1. Create a free account at supabase.com and make a **new project**. Choose the region **Frankfurt (eu-central-1)**, the closest to Egypt. Save the database password somewhere safe.
-2. Open **SQL Editor**, paste the whole of `supabase/migrations/20261113000000_init.sql`, and press **Run**. It should say *Success*.
+2. Open **SQL Editor** and run every file in `supabase/migrations/`, one at a time, **oldest first** (the date is in the file name). For each one: paste the whole file, press **Run**, and wait for *Success* before the next. Today that is:
+   1. `20261113000000_init.sql`
+   2. `20261114000000_tighten.sql`
 3. Open **Authentication → Sign In / Providers** and turn **off** "Allow new users to sign up". Accounts are made only by the manager inside the app.
 4. Open **Project Settings → API Keys** (or the **Connect** button) and copy three things:
    - the **Project URL**
