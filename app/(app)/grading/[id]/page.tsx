@@ -29,6 +29,8 @@ export default async function GradeOne({ params }: { params: Promise<{ id: strin
         <PageViewer key={x.id} pages={pages} name={x.student.full_name} />
         <form action={grade} className="panel form" key={x.id}>
           <input type="hidden" name="id" value={x.id} />
+          {/* which pages were on screen: if the student sends new ones before this is saved, the grade is refused */}
+          <input type="hidden" name="seen" value={x.created_at} />
           <div className="row">
             <div>
               <h2><Link className="link plain" href={`/students/${x.student.id}`}>{x.student.full_name}</Link></h2>

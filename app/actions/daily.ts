@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { can, getMe } from '@/lib/me'
 import { MAX_PAGES, pagesLabel } from '@/lib/pages'
 import { back, int, isDay, str, today } from '@/lib/util'
-import { removePhotos, staffOnly } from './shared'
+import { staffOnly, tidyPhotos } from './shared'
 
 // ---------- attendance ----------
 
@@ -39,20 +39,22 @@ export async function deleteAttendanceDay(fd: FormData) {
 export async function grade(fd: FormData) {
   const id = str(fd, 'id')
   const path = `/grading/${id}`
-  const { sb, me } = await staffOnly((me) => can(me, 'grade'), path)
+  const { sb } = await staffOnly((me) => can(me, 'grade'), path)
   const { data: sub } = await sb.from('submissions').select('id, assignment:assignments(questions)').eq('id', id).maybeSingle()
   if (!sub) back('/grading', 'الحل ده مش موجود أو مش من طلابك', true)
   const q = sub.assignment.questions
   const correct = int(fd, 'correct'), wrong = int(fd, 'wrong')
   if (!(correct >= 0 && wrong >= 0)) back(path, 'اكتب عدد الصح والغلط بأرقام', true)
   if (correct + wrong > q) back(path, `الصح والغلط مع بعض أكتر من ${q} سؤال`, true)
-  const note = str(fd, 'note').slice(0, 2000)
-  const { error } = await sb
-    .from('grades')
-    .upsert({ submission_id: id, correct, wrong, note, graded_by: me.id, graded_at: new Date().toISOString() })
+  // One step in the database: the grade and "reviewed" together, and only if these are still the pages
+  // that were on the teacher's screen (the student may send again until it is reviewed).
+  const { data: result, error } = await sb.rpc('grade_submission', {
+    sub: id, n_correct: correct, n_wrong: wrong, teacher_note: str(fd, 'note').slice(0, 2000), seen: str(fd, 'seen'),
+  })
   if (error) back(path, 'الدرجة مترصدتش: ' + error.message, true)
-  const { error: e2 } = await sb.from('submissions').update({ status: 'reviewed' }).eq('id', id)
-  if (e2) back(path, 'الدرجة اترصدت بس الحل لسه ظاهر إنه مستني. جرّب تحفظ تاني: ' + e2.message, true)
+  if (result === 'changed') back(path, 'الطالب بعت صفحات جديدة وإنت بتصحح. راجعها وارصد الدرجة تاني', true)
+  if (result === 'range') back(path, `الصح والغلط مع بعض أكتر من ${q} سؤال`, true)
+  if (result !== 'ok') back('/grading', 'الحل ده مش موجود أو مش من طلابك', true)
   const { data: next } = await sb.from('submissions').select('id').eq('status', 'new').order('created_at').limit(1).maybeSingle()
   const done = `اترصدت: ${correct} من ${correct + wrong}`
   if (next) back(`/grading/${next.id}`, done + ' — ده الحل اللي بعده')
@@ -82,14 +84,15 @@ export async function submitSolution(assignmentId: string, paths: string[]): Pro
   const { error } = await sb
     .from('submissions')
     .upsert(
-      { assignment_id: assignmentId, student_id: me.id, photo_paths: paths, status: 'new', created_at: new Date().toISOString() },
+      { assignment_id: assignmentId, student_id: me.id, photo_paths: paths, status: 'new' }, // the database stamps the time
       { onConflict: 'assignment_id,student_id' },
     )
   if (error) return 'الحل متبعتش. حدّث الصفحة وجرّب تاني، ولو فضلت المشكلة كلّم الأستاذ.'
 
-  // Photos this replaced are no longer shown to anyone, so they leave storage. Students cannot delete
-  // from storage themselves; the paths come from this student's own row, which was checked above.
-  await removePhotos((before?.photo_paths ?? []).filter((p) => mine(p) && !paths.includes(p)))
+  // Photos this replaced are no longer shown to anyone, so they leave storage (students cannot delete there
+  // themselves). What the row holds now is read again, in case another tab sent in the meantime.
+  const { data: now } = await sb.from('submissions').select('photo_paths').eq('assignment_id', assignmentId).eq('student_id', me.id).maybeSingle()
+  await tidyPhotos(me.id, assignmentId, (before?.photo_paths ?? []).filter(mine), now?.photo_paths ?? paths)
   revalidatePath('/', 'layout')
   return null
 }

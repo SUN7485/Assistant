@@ -52,7 +52,7 @@ export default async function Upload() {
           <ul className="list">
             {mine.map((m) => (
               <li key={m.assignment_id}>
-                <div><b>{title.get(m.assignment_id)}</b><div className="muted small">{fTime(m.created_at)} · {pagesLabel(m.photo_paths.length)}</div></div>
+                <div><b>{title.get(m.assignment_id) ?? 'واجب اتمسح'}</b><div className="muted small">{fTime(m.created_at)} · {pagesLabel(m.photo_paths.length)}</div></div>
                 {m.status === 'reviewed' ? <span className="chip ok">الأستاذ راجعه</span> : <span className="chip">وصل للأستاذ</span>}
               </li>
             ))}

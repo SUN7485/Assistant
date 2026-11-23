@@ -22,8 +22,7 @@ export function BulkAdd({ group }: { group: string }) {
           <span>كل طالب في سطر: الاسم، رقم موبايله، وبعده رقم ولي الأمر لو موجود</span>
           <textarea id="b-list" name="list" rows={6} dir="auto" required placeholder={'أحمد علي، 01012345678، 01198765432\nمنى سعيد، 01022223333'} />
         </label>
-        <label className="fld narrow"><span>اشتراك المجموعة دي في الشهر (ج.م)</span><input id="b-fee" name="fee" type="number" min={0} step={10} defaultValue={300} /></label>
-        <p className="muted small">تقدر تنسخ القائمة من إكسل أو واتساب زي ما هي. كل طالب جديد هياخد كلمة سر من 6 أرقام تظهر لك هنا مرة واحدة.</p>
+        <p className="muted small">تقدر تنسخ القائمة من إكسل أو واتساب زي ما هي. كل طالب جديد هياخد كلمة سر من 8 أرقام تظهر لك هنا مرة واحدة، ويقدر يغيّرها من «حسابي».</p>
         <div><button className="btn" disabled={busy}>{busy ? 'بيتضافوا…' : 'إضافة القائمة'}</button></div>
       </form>
       {res?.error && <p className="error" role="alert">{res.error}</p>}

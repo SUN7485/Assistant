@@ -82,10 +82,10 @@ await t2.locator('button:has-text("حفظ البيانات")').click(); await pa
 check(await seen('اتحفظت بيانات المدرس') && await has(page.locator('article b', { hasText: 'أ. تجربة تاني' })), 'corrected a teacher\'s name')
 await shot('teachers'); await wide('teachers')
 
-const addGroup = async (name, teacher, schedule) => {
+const addGroup = async (name, teacher, schedule, fee = '300') => {
   await go('/groups')
-  if (!(await has(page.locator('#g-name')))) await page.click('summary:has-text("إضافة مجموعة")')
-  await page.fill('#g-name', name); await page.selectOption('#g-teacher', { label: teacher }); await page.fill('#g-schedule', schedule)
+  if (!(await page.locator('#g-name').isVisible())) await page.click('summary:has-text("إضافة مجموعة")') // go() waited for the page
+  await page.fill('#g-name', name); await page.selectOption('#g-teacher', { label: teacher }); await page.fill('#g-schedule', schedule); await page.fill('#g-fee', fee)
   await page.click('button:has-text("إضافة المجموعة")'); await page.waitForURL('**/groups?g=**')
   check(await seen('اتضافت'), 'added the group ' + name)
   return page.url().split('&')[0]
@@ -114,18 +114,17 @@ await addHomework(groupUrl, 'تمارين التفاضل', '20')
 await shot('groups'); await wide('groups')
 
 // a second subject: the same student joins another teacher's group with the same account
-const physicsUrl = await addGroup('فيزياء الأحد', 'أ. تجربة تاني — فيزياء', 'الأحد 6 م')
+const physicsUrl = await addGroup('فيزياء الأحد', 'أ. تجربة تاني — فيزياء', 'الأحد 6 م', '250')
 check(await addStudent(physicsUrl, 'أي اسم', '01222222221', 'بنفس حسابه'), 'a student with an account joins a second group by phone number')
 await addHomework(physicsUrl, 'مسائل الحركة', '10')
 // the rest of the class, pasted as a list
 await page.goto(physicsUrl)
 await page.click('summary:has-text("إضافة قائمة طلاب")')
 await page.fill('#b-list', 'طالبة تالتة، 01222222223، 01033333334\n01222222224\tطالب رابع\nسطر من غير رقم\nطالب تاني 01222222222')
-await page.fill('#b-fee', '250')
 await page.click('button:has-text("إضافة القائمة")')
 await page.waitForSelector('#b-made')
 const made = await page.locator('#b-made tbody tr').evaluateAll((rows) => rows.map((r) => [...r.cells].map((c) => c.textContent.trim())))
-check(made.length === 3 && /^\d{6}$/.test(made[0][2]) && /^\d{6}$/.test(made[1][2]), 'pasted list made two new students with six-digit passwords')
+check(made.length === 3 && /^\d{8}$/.test(made[0][2]) && /^\d{8}$/.test(made[1][2]), 'pasted list made two new students with eight-digit passwords')
 check(made[2][2].includes('عنده حساب'), 'pasted list put an existing student in the group without a new password')
 check(await has(page.locator('text=مفيش رقم موبايل في السطر')), 'pasted list says which line it could not read')
 await page.waitForSelector('tr:has-text("طالبة تالتة")')
@@ -143,8 +142,11 @@ await page.fill('#p-name', 'طالب رابع المعدّل'); await page.fill(
 await page.click('details:has(#p-name) button:has-text("حفظ")'); await page.waitForURL('**/students/**?**')
 check(await seen('هيدخل بالرقم الجديد') && await has(page.locator('h1', { hasText: 'طالب رابع المعدّل' })), 'changed a student\'s name and login number')
 await page.click('#memberships summary:has-text("تعديل")')
-await page.fill('#memberships input[name=fee]', '200'); await page.click('button:has-text("غيّر الاشتراك")'); await page.waitForURL('**/students/**?**')
-check(await seen('اتغير الاشتراك') && await has(page.locator('text=الاشتراك 200')), 'changed one group\'s fee for a student')
+await page.fill('#memberships input[name=fee]', '200'); await page.click('button:has-text("اشتراك خاص")'); await page.waitForURL('**/students/**?**')
+check(await seen('اشتراك خاص') && await has(page.locator('text=الاشتراك 200')), 'gave one student a special fee for a group')
+await page.click('#memberships summary:has-text("تعديل")')
+await page.fill('#memberships input[name=fee]', ''); await page.click('button:has-text("اشتراك خاص")'); await page.waitForURL('**/students/**?**')
+check(await seen('اشتراك المجموعة العادي') && await has(page.locator('text=الاشتراك 250')), 'an empty special fee puts the student back on the group\'s fee')
 await page.click('summary:has-text("مسح حساب الطالب")'); await page.click('button:has-text("أيوه، امسح الحساب")'); await page.waitForURL('**/students?**')
 await page.waitForSelector('#students')
 check(await seen('اتمسح حساب') && (await page.locator('#students li').count()) === 3, 'deleted an account made by mistake')

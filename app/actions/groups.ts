@@ -7,9 +7,11 @@ import { removePhotos, staffOnly } from './shared'
 
 export async function addGroup(fd: FormData) {
   const { sb } = await staffOnly((me) => me.role === 'admin', '/groups')
+  const fee = int(fd, 'fee')
+  if (!(fee >= 0)) back('/groups', 'اكتب اشتراك المجموعة في الشهر بالأرقام (صفر لو مفيش)', true)
   const { data, error } = await sb
     .from('groups')
-    .insert({ name: str(fd, 'name'), teacher_id: str(fd, 'teacher'), schedule: str(fd, 'schedule') })
+    .insert({ name: str(fd, 'name'), teacher_id: str(fd, 'teacher'), schedule: str(fd, 'schedule'), monthly_fee: fee })
     .select('id')
     .single()
   if (error) back('/groups', 'المجموعة متضافتش: ' + error.message, true)
@@ -20,7 +22,9 @@ export async function saveGroup(fd: FormData) {
   const id = str(fd, 'id')
   const path = `/groups?g=${id}`
   const { sb } = await staffOnly((me) => me.role === 'admin', path)
-  const { error } = await sb.from('groups').update({ name: str(fd, 'name'), teacher_id: str(fd, 'teacher'), schedule: str(fd, 'schedule') }).eq('id', id)
+  const fee = int(fd, 'fee')
+  if (!(fee >= 0)) back(path, 'اكتب اشتراك المجموعة في الشهر بالأرقام (صفر لو مفيش)', true)
+  const { error } = await sb.from('groups').update({ name: str(fd, 'name'), teacher_id: str(fd, 'teacher'), schedule: str(fd, 'schedule'), monthly_fee: fee }).eq('id', id)
   if (error) back(path, 'المجموعة متحفظتش: ' + error.message, true)
   back(path, 'اتحفظت بيانات المجموعة')
 }
@@ -42,9 +46,11 @@ export async function deleteGroup(fd: FormData) {
   const path = `/groups?g=${id}`
   const { sb } = await staffOnly((me) => me.role === 'admin', path)
   const count = (t: 'enrollments' | 'assignments' | 'attendance' | 'payments') =>
-    sb.from(t).select('group_id', { count: 'exact', head: true }).eq('group_id', id).then((r) => r.count ?? 0)
-  const used = (await Promise.all([count('enrollments'), count('assignments'), count('attendance'), count('payments')])).some(Boolean)
-  if (used) back(path, 'المجموعة فيها طلاب أو واجبات أو حضور أو اشتراكات متسجلة، فمينفعش تتمسح. أرشفها بدل كده', true)
+    sb.from(t).select('group_id', { count: 'exact', head: true }).eq('group_id', id).then((r) => (r.error ? null : r.count))
+  const counts = await Promise.all([count('enrollments'), count('assignments'), count('attendance'), count('payments')])
+  // Deleting cannot be undone, so not knowing is a reason to stop.
+  if (counts.some((n) => n == null)) back(path, 'مقدرناش نتأكد إن المجموعة فاضية. جرّب تاني', true)
+  if (counts.some(Boolean)) back(path, 'المجموعة فيها طلاب أو واجبات أو حضور أو اشتراكات متسجلة، فمينفعش تتمسح. أرشفها بدل كده', true)
   const { error } = await sb.from('groups').delete().eq('id', id)
   if (error) back(path, 'المجموعة متمسحتش: ' + error.message, true)
   back('/groups', 'اتمسحت المجموعة')
@@ -69,11 +75,12 @@ export async function saveAssignment(fd: FormData) {
   const { sb } = await staffOnly((me) => me.role !== 'student', path)
   const questions = int(fd, 'questions')
   if (!(questions >= 1 && questions <= 200)) back(path, 'عدد الأسئلة من 1 لـ 200', true)
-  // A grade already given cannot end up with more answers than the homework has questions.
+  // A grade already given cannot end up with more answers than the homework has questions (the database holds this too).
   const { data: graded } = await sb.from('submissions').select('grades(correct, wrong)').eq('assignment_id', id)
   const most = Math.max(0, ...(graded ?? []).map((s) => (s.grades ? s.grades.correct + s.grades.wrong : 0)))
   if (questions < most) back(path, `فيه حل اتصحح على ${most} سؤال، فعدد الأسئلة مينفعش يقل عن كده`, true)
   const { data, error } = await sb.from('assignments').update({ title: str(fd, 'title'), questions }).eq('id', id).select('id')
+  if (error?.message.includes('already graded')) back(path, 'فيه حل اتصحح على أسئلة أكتر من كده، فعدد الأسئلة مينفعش يقل', true)
   if (error || !data?.length) back(path, 'الواجب متحفظش' + (error ? ': ' + error.message : ''), true)
   back(path, 'اتحفظ الواجب')
 }

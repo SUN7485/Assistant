@@ -10,7 +10,7 @@ A tutoring-centre platform in Egyptian Arabic. Three kinds of account, each sign
 
 How the centre is modelled:
 
-- A **student can be in several groups** (one per subject or teacher) with one account. Each group has its own monthly fee and is paid for separately.
+- A **student can be in several groups** (one per subject or teacher) with one account. Each group has its monthly fee and is paid for separately; a student who pays something else (a discount, a sibling) gets a special fee for that group.
 - A **teacher sees only their own side** of a shared student: the homework, solutions, grades and photos of their own groups.
 - **Nothing recorded is lost by tidying up**: a student who leaves a group keeps their history there, and last year's group is archived, not deleted. Only things made by mistake (an empty group, an account with no payments) can be deleted.
 
@@ -26,7 +26,8 @@ Built with Next.js (on Vercel) and Supabase (database, logins, photo storage). S
 1. Create a free account at supabase.com and make a **new project**. Choose the region **Frankfurt (eu-central-1)**: it is the closest to Egypt, and the website is set to run there too (`vercel.json`). Save the database password somewhere safe.
 2. Open **Authentication → Sign In / Providers** and turn **off** "Allow new users to sign up". Accounts are made only inside the app.
 3. Open **Authentication → Rate Limits** and raise **sign-ups and sign-ins** from 30 to about 300 per 5 minutes. A whole class signing in from the centre's Wi-Fi shares one address, and 30 is not enough for that.
-4. Open **Project Settings → API Keys** (or the **Connect** button) and copy three things:
+4. Recommended: under **Authentication → Sign In / Providers → Email**, turn on **Secure password change**, so a password can only be changed right after signing in.
+5. Open **Project Settings → API Keys** (or the **Connect** button) and copy three things:
    - the **Project URL**
    - the **anon / publishable** key
    - the **service_role / secret** key. Keep this one private and never post it anywhere.
@@ -41,9 +42,9 @@ Built with Next.js (on Vercel) and Supabase (database, logins, photo storage). S
 
 ### 3. First run
 1. Open `https://<your-link>/setup`. It checks the settings and tells you what is missing. The first time, it gives you a **copy button for the database file**: paste it into Supabase **SQL Editor**, press **Run**, wait for *Success*, and refresh. (The file is `supabase/install.sql` if you prefer to open it yourself.)
-2. Make the manager account. The page works once and then closes itself.
+2. Make the manager account straight away. The page works once and then closes itself; until then, whoever opens it first becomes the manager.
 3. **المدرسين**: add the teachers and tick their permissions.
-4. **المجموعات**: add groups, then their students — one at a time, or paste the whole class list at once (each student gets a six-digit password, shown once). A student who takes a second subject is added to the second group with the **same phone number** and keeps one account.
+4. **المجموعات**: add groups with their monthly fee, then their students — one at a time, or paste the whole class list at once (each student gets an eight-digit password, shown once). A student who takes a second subject is added to the second group by the manager with the **same phone number** and keeps one account.
 5. Give each student the link plus their phone number and password. On the phone they open the link, sign in, and choose **Add to Home Screen**. They can change their password under **حسابي**.
 
 ### Updating later
@@ -85,5 +86,6 @@ A database change:
 - `app/actions/` — every save, by area (`people`, `groups`, `daily`, `money`, `auth`). Each one checks who is calling before it writes; `shared.ts` has the helpers that use the service key.
 - `app/(app)/*/page.tsx` — the screens. `app/(app)/layout.tsx` is the header and tabs, and the "database is behind" notice.
 - `components/UploadForm.tsx` — the student's camera: shrinks each page's photo on the phone, then uploads them. `PageViewer.tsx` — the teacher turning the pages. `BulkAdd.tsx` — pasting a class list. `LoginForm.tsx` — signing in from the browser.
-- `lib/` — the signed-in person (`me.ts`), database clients (`supabase.ts`) and generated types, dates in Cairo time and figures (`util.ts`), phone numbers as people type them (`phone.ts`), reading a pasted class list (`roster.ts`).
+- `lib/` — the signed-in person (`me.ts`), database clients (`supabase.ts`) and generated types, reading lists past the 1000-row limit (`data.ts`), dates in Cairo time and figures (`util.ts`), phone numbers as people type them (`phone.ts`), reading a pasted class list (`roster.ts`).
+- Totals (attendance, averages, who sent, last class) are counted by database views at the end of the last migration, not in the screens.
 - `tests/` — unit tests for the pure helpers. `scripts/walk.mjs` — the browser walkthrough.

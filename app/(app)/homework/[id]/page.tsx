@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation'
 import { can, need, isStaff } from '@/lib/me'
 import { deleteAssignment, saveAssignment } from '@/app/actions/groups'
 import { Submit } from '@/components/Submit'
+import { all } from '@/lib/data'
 import { pagesLabel } from '@/lib/pages'
 import { byName, dayOf, fDay, fTime, isId, nStudents, pct, wa } from '@/lib/util'
 
@@ -13,12 +14,12 @@ export default async function Homework({ params }: { params: Promise<{ id: strin
   if (!isId(id)) notFound()
   const { data: w } = await sb.from('assignments').select('id, title, questions, created_at, group:groups(id, name)').eq('id', id).maybeSingle()
   if (!w) notFound()
-  const [{ data: roster }, { data: subs }] = await Promise.all([
-    sb.from('enrollments').select('student:profiles(id, full_name, phone, parent_phone)').eq('group_id', w.group.id),
-    sb.from('submissions').select('id, student_id, status, created_at, photo_paths, grades(correct, wrong)').eq('assignment_id', id),
+  const [roster, subs] = await Promise.all([
+    all((a, b) => sb.from('enrollments').select('student:profiles(id, full_name, phone, parent_phone)', { count: 'exact' }).eq('group_id', w.group.id).order('student_id').range(a, b)),
+    all((a, b) => sb.from('submissions').select('id, student_id, status, created_at, photo_paths, grades(correct, wrong)', { count: 'exact' }).eq('assignment_id', id).order('id').range(a, b)),
   ])
-  const students = (roster ?? []).map((r) => r.student).sort(byName)
-  const sub = new Map((subs ?? []).map((s) => [s.student_id, s]))
+  const students = roster.map((r) => r.student).sort(byName)
+  const sub = new Map(subs.map((s) => [s.student_id, s]))
   const sent = students.filter((s) => sub.has(s.id)), missing = students.filter((s) => !sub.has(s.id))
   const grading = can(me, 'grade')
 

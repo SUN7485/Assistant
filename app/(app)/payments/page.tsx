@@ -3,7 +3,8 @@ import { can, need } from '@/lib/me'
 import { togglePayment } from '@/app/actions/money'
 import { Stat } from '@/components/Stat'
 import { Submit } from '@/components/Submit'
-import { fMonth, isMonth, money, nStudents, thisMonth, wa } from '@/lib/util'
+import { all } from '@/lib/data'
+import { feeOf, fMonth, isMonth, money, nStudents, thisMonth, wa } from '@/lib/util'
 
 /** One line per student per group: each group is paid for on its own. */
 export default async function Payments({ searchParams }: { searchParams: Promise<{ m?: string; g?: string }> }) {
@@ -11,22 +12,26 @@ export default async function Payments({ searchParams }: { searchParams: Promise
   const { m, g: asked } = await searchParams
   const month = m && isMonth(m) ? m : thisMonth()
   const admin = me.role === 'admin'
-  const [{ data: groups }, { data: roster }, { data: pays }] = await Promise.all([
-    sb.from('groups').select('id, name').is('archived_at', null).order('created_at'),
-    sb.from('enrollments').select('group_id, monthly_fee, student:profiles(id, full_name, parent_phone)'),
-    sb.from('payments').select('student_id, group_id, amount').eq('month', month),
+  // Read whole, a page at a time: a big centre has more lines than one request returns.
+  const [{ data: groups }, roster, special, pays] = await Promise.all([
+    sb.from('groups').select('id, name, monthly_fee').is('archived_at', null).order('created_at'),
+    all((a, b) => sb.from('enrollments').select('group_id, student:profiles(id, full_name, parent_phone)', { count: 'exact' }).order('student_id').order('group_id').range(a, b)),
+    all((a, b) => sb.from('special_fees').select('student_id, group_id, monthly_fee', { count: 'exact' }).order('student_id').order('group_id').range(a, b)),
+    all((a, b) => sb.from('payments').select('student_id, group_id, amount', { count: 'exact' }).eq('month', month).order('student_id').order('group_id').range(a, b)),
   ])
   const g = groups?.find((x) => x.id === asked)
+  const group = new Map((groups ?? []).map((x) => [x.id, x]))
   const name = new Map((groups ?? []).map((x) => [x.id, x.name]))
-  const key = (student: string, group: string) => student + group
-  const paid = new Map((pays ?? []).map((p) => [key(p.student_id, p.group_id), p.amount]))
-  const lines = (roster ?? [])
-    .filter((e) => name.has(e.group_id) && (!g || e.group_id === g.id))
-    .map((e) => ({ ...e, got: paid.get(key(e.student.id, e.group_id)) }))
+  const key = (student: string, grp: string) => student + grp
+  const own = new Map(special.map((f) => [key(f.student_id, f.group_id), f]))
+  const paid = new Map(pays.map((p) => [key(p.student_id, p.group_id), p.amount]))
+  const lines = roster
+    .filter((e) => group.has(e.group_id) && (!g || e.group_id === g.id))
+    .map((e) => ({ ...e, monthly_fee: feeOf(group.get(e.group_id)!, own.get(key(e.student.id, e.group_id))), got: paid.get(key(e.student.id, e.group_id)) }))
     .sort((a, b) => Number(a.got != null) - Number(b.got != null) || a.student.full_name.localeCompare(b.student.full_name, 'ar'))
   const open = lines.filter((l) => l.got == null)
   // Money that came in counts even when the student has since left the group.
-  const collected = (pays ?? []).filter((p) => !g || p.group_id === g.id).reduce((t, p) => t + p.amount, 0)
+  const collected = pays.filter((p) => !g || p.group_id === g.id).reduce((t, p) => t + p.amount, 0)
   const here = `/payments?m=${month}${g ? '&g=' + g.id : ''}`
 
   return (

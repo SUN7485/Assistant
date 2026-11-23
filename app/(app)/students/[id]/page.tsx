@@ -5,7 +5,7 @@ import { deleteStudent, enroll, resetPassword, saveStudent, setFee, unenroll } f
 import { Stat } from '@/components/Stat'
 import { Spark } from '@/components/Spark'
 import { Submit } from '@/components/Submit'
-import { ATT, attendanceOf, average, fDay, fTime, isId, level, money, pct } from '@/lib/util'
+import { ATT, attendanceOf, average, fDay, feeOf, fTime, isId, level, money, pct } from '@/lib/util'
 
 export default async function StudentFile({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -16,7 +16,7 @@ export default async function StudentFile({ params }: { params: Promise<{ id: st
   if (!s) notFound()
   // A teacher gets only their own groups' side of the student: the database filters each of these.
   const [{ data: memberships }, { data: att }, { data: work }, { data: groups }] = await Promise.all([
-    sb.from('enrollments').select('monthly_fee, group:groups(id, name, archived_at)').eq('student_id', id).order('joined_at'),
+    sb.from('enrollments').select('group:groups(id, name, monthly_fee, archived_at), special_fees(monthly_fee)').eq('student_id', id).order('joined_at'),
     sb.from('attendance').select('day, status, group_id').eq('student_id', id).order('day', { ascending: false }),
     sb.from('submissions').select('id, created_at, assignment:assignments(title, group_id), grades(correct, wrong, note)').eq('student_id', id).order('created_at'),
     sb.from('groups').select('id, name, archived_at').order('created_at'),
@@ -54,7 +54,7 @@ export default async function StudentFile({ params }: { params: Promise<{ id: st
                 <div>
                   <Link className="link" href={`/groups?g=${m.group.id}`}><b>{m.group.name}</b></Link>
                   {m.group.archived_at && <span className="chip warn"> مؤرشفة</span>}
-                  {can(me, 'see_payments') && <div className="muted small">الاشتراك {money(m.monthly_fee)} في الشهر</div>}
+                  {can(me, 'see_payments') && <div className="muted small">الاشتراك {money(feeOf(m.group, m.special_fees))} في الشهر{m.special_fees ? ` (خاص — المجموعة ${money(m.group.monthly_fee)})` : ''}</div>}
                 </div>
                 {admin && (
                   <details className="inline">
@@ -62,8 +62,9 @@ export default async function StudentFile({ params }: { params: Promise<{ id: st
                     <form action={setFee} className="actions">
                       <input type="hidden" name="student" value={s.id} />
                       <input type="hidden" name="group" value={m.group.id} />
-                      <input name="fee" type="number" min={0} step={10} defaultValue={m.monthly_fee} aria-label={`اشتراك ${m.group.name} في الشهر`} className="short" />
-                      <Submit className="btn sm ghost2">غيّر الاشتراك</Submit>
+                      <input name="fee" type="number" min={0} step={10} defaultValue={m.special_fees?.monthly_fee ?? ''} placeholder={String(m.group.monthly_fee)} aria-label={`اشتراك خاص في ${m.group.name}`} className="short" />
+                      <Submit className="btn sm ghost2">اشتراك خاص</Submit>
+                      <span className="muted small">سيبه فاضي لو بيدفع اشتراك المجموعة ({money(m.group.monthly_fee)}).</span>
                     </form>
                     <form action={unenroll} className="actions">
                       <input type="hidden" name="student" value={s.id} />
@@ -87,7 +88,6 @@ export default async function StudentFile({ params }: { params: Promise<{ id: st
               <label className="fld"><span>المجموعة</span>
                 <select id="e-group" name="group">{free.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}</select>
               </label>
-              <label className="fld"><span>اشتراكها في الشهر (ج.م)</span><input id="e-fee" name="fee" type="number" min={0} step={10} defaultValue={300} /></label>
               <Submit>ضيفه</Submit>
             </form>
           </details>
@@ -108,7 +108,7 @@ export default async function StudentFile({ params }: { params: Promise<{ id: st
               <li key={x.id}>
                 <div>
                   {can(me, 'grade') ? <Link className="link" href={`/grading/${x.id}`}><b>{x.title}</b></Link> : <b>{x.title}</b>}
-                  <div className="muted small">{many ? groupName.get(x.group) + ' · ' : ''}{fTime(x.at)}{x.note ? ' · ' + x.note : ''}</div>
+                  <div className="muted small">{many && groupName.has(x.group) ? groupName.get(x.group) + ' · ' : ''}{fTime(x.at)}{x.note ? ' · ' + x.note : ''}</div>
                 </div>
                 <div className="score"><span className="ok">✓ {x.correct}</span><span className="bad">✗ {x.wrong}</span><b>{x.p}%</b></div>
               </li>

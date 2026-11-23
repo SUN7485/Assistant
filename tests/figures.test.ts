@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { pagesLabel } from '../lib/pages'
-import { attendanceOf, average, count, isDay, isId, isMonth, level, localPath, money, nStudents, pct, wa } from '../lib/util'
+import { attendanceOf, average, count, feeOf, int, isDay, isId, isMonth, level, localPath, money, nStudents, pct, wa } from '../lib/util'
 
 const form = (o: Record<string, string>) => {
   const fd = new FormData()
@@ -12,6 +12,12 @@ describe('grades', () => {
   it('is the share of right answers among those answered', () => {
     expect(pct(15, 5)).toBe(75)
     expect(pct(0, 0)).toBe(0) // nothing answered is not a crash
+    expect(pct(57, 143)).toBe(29) // 28.5 rounds up, exactly as the database's student_stats does
+  })
+  it('charges the group\'s fee unless the student has a special one', () => {
+    expect(feeOf({ monthly_fee: 300 })).toBe(300)
+    expect(feeOf({ monthly_fee: 300 }, null)).toBe(300)
+    expect(feeOf({ monthly_fee: 300 }, { monthly_fee: 0 })).toBe(0) // a free place is a fee of zero, not "no special fee"
   })
   it('averages, or says there is nothing to average', () => {
     expect(average([75, 80])).toBe(78)
@@ -47,14 +53,23 @@ describe('what a form may send', () => {
   it('knows a day, a month and an id', () => {
     expect(isDay('2026-11-23')).toBe(true)
     expect(isDay('23/11/2026')).toBe(false)
+    expect(isDay('2026-02-31')).toBe(false) // looks like a day, is not one
     expect(isMonth('2026-11')).toBe(true)
     expect(isMonth('2026-13')).toBe(false)
     expect(isId('00000000-0000-0000-0000-0000000000a1')).toBe(true)
     expect(isId("1' or '1'='1")).toBe(false)
   })
+  it('reads a whole number, and does not take an empty field for zero', () => {
+    expect(int(form({ n: '12' }), 'n')).toBe(12)
+    expect(int(form({ n: '0' }), 'n')).toBe(0)
+    expect(int(form({ n: '' }), 'n')).toBeNaN()
+    expect(int(form({}), 'n')).toBeNaN()
+    expect(int(form({ n: '1.5' }), 'n')).toBeNaN()
+    expect(int(form({ n: 'abc' }), 'n')).toBeNaN()
+  })
   it('only goes back to a page of this app', () => {
     expect(localPath(form({ back: '/students/abc?x=1' }), '/home')).toBe('/students/abc?x=1')
-    for (const bad of ['https://evil.example', '//evil.example', '/\\evil.example', 'javascript:alert(1)', ''])
+    for (const bad of ['https://evil.example', '//evil.example', '/\\evil.example', '/\t/evil.example', '/\n/evil.example', 'javascript:alert(1)', ''])
       expect(localPath(form({ back: bad }), '/home')).toBe('/home')
   })
 })

@@ -4,7 +4,8 @@ import { addAssignment, addGroup, archiveGroup, deleteGroup, saveGroup } from '@
 import { addStudent } from '@/app/actions/people'
 import { BulkAdd } from '@/components/BulkAdd'
 import { Submit } from '@/components/Submit'
-import { attendanceOf, average, byName, dayOf, fDay, fMonth, level, nStudents, pct, thisMonth } from '@/lib/util'
+import { all as readAll } from '@/lib/data'
+import { byName, dayOf, fDay, fMonth, level, money, nStudents, thisMonth } from '@/lib/util'
 
 // Adding a pasted class list makes an account per student; give it room to finish.
 export const maxDuration = 60
@@ -15,7 +16,7 @@ export default async function Groups({ searchParams }: { searchParams: Promise<{
   const { g: asked, archived } = await searchParams
   const { data: all } = await sb
     .from('groups')
-    .select('id, name, schedule, archived_at, teacher_id, teacher:profiles!groups_teacher_id_fkey(full_name)')
+    .select('id, name, schedule, monthly_fee, archived_at, teacher_id, teacher:profiles!groups_teacher_id_fkey(full_name)')
     .order('created_at')
   const live = (all ?? []).filter((x) => !x.archived_at), put = (all ?? []).filter((x) => x.archived_at)
   const shown = archived ? put : live
@@ -38,6 +39,7 @@ export default async function Groups({ searchParams }: { searchParams: Promise<{
           <label className="fld"><span>اسم المجموعة</span><input id="g-name" name="name" placeholder="مثلاً: تالتة ثانوي — السبت" required minLength={2} /></label>
           {teacherPick('g-teacher')}
           <label className="fld"><span>المواعيد</span><input id="g-schedule" name="schedule" placeholder="السبت والتلات 4:00 م" /></label>
+          <label className="fld"><span>الاشتراك في الشهر (ج.م)</span><input id="g-fee" name="fee" type="number" min={0} step={10} defaultValue={300} required /></label>
           <Submit>إضافة المجموعة</Submit>
         </form>
       ) : (
@@ -59,17 +61,16 @@ export default async function Groups({ searchParams }: { searchParams: Promise<{
       </>
     )
 
-  const [{ data: roster }, { data: att }, { data: work }, { data: assignments }, pays] = await Promise.all([
-    sb.from('enrollments').select('monthly_fee, student:profiles(id, full_name)').eq('group_id', g.id),
-    sb.from('attendance').select('student_id, status').eq('group_id', g.id),
-    sb.from('submissions').select('student_id, assignment_id, grades(correct, wrong), assignment:assignments!inner(group_id)').eq('assignment.group_id', g.id),
+  // Totals come counted from the database (student_stats, homework_counts), so a long history is never cut short.
+  const [roster, { data: counts }, { data: assignments }, pays] = await Promise.all([
+    readAll((a, b) => sb.from('student_stats').select('classes, present, late, average, student:profiles(id, full_name)', { count: 'exact' }).eq('group_id', g.id).order('student_id').range(a, b)),
+    sb.from('homework_counts').select('assignment_id, sent').eq('group_id', g.id),
     sb.from('assignments').select('id, title, questions, created_at').eq('group_id', g.id).order('created_at', { ascending: false }),
-    showPay ? sb.from('payments').select('student_id').eq('group_id', g.id).eq('month', month) : null,
+    showPay ? readAll((a, b) => sb.from('payments').select('student_id', { count: 'exact' }).eq('group_id', g.id).eq('month', month).order('student_id').range(a, b)) : [],
   ])
-  const students = (roster ?? []).map((r) => r.student).sort(byName)
-  const here = new Set(students.map((s) => s.id))
-  const paid = new Set((pays?.data ?? []).map((p) => p.student_id))
-  const marks = (sid: string) => (work ?? []).flatMap((w) => (w.student_id === sid && w.grades ? [pct(w.grades.correct, w.grades.wrong)] : []))
+  const students = roster.flatMap((r) => (r.student ? [{ ...r.student, stats: r }] : [])).sort(byName)
+  const paid = new Set(pays.map((p) => p.student_id))
+  const sentFor = new Map((counts ?? []).map((c) => [c.assignment_id, c.sent ?? 0]))
 
   return (
     <>
@@ -85,7 +86,7 @@ export default async function Groups({ searchParams }: { searchParams: Promise<{
         <div className="row">
           <div>
             <h2>{g.name}</h2>
-            <div className="muted">{g.teacher?.full_name}{g.schedule ? ' · ' + g.schedule : ''}</div>
+            <div className="muted">{g.teacher?.full_name}{g.schedule ? ' · ' + g.schedule : ''}{showPay ? ` · الاشتراك ${money(g.monthly_fee)} في الشهر` : ''}</div>
           </div>
           <div className="actions">
             {g.archived_at && <span className="chip warn">مؤرشفة</span>}
@@ -104,8 +105,9 @@ export default async function Groups({ searchParams }: { searchParams: Promise<{
               </thead>
               <tbody>
                 {students.map((s) => {
-                  const a = attendanceOf((att ?? []).filter((r) => r.student_id === s.id))
-                  const av = average(marks(s.id))
+                  const classes = s.stats.classes ?? 0
+                  const a = { pct: classes ? Math.round((((s.stats.present ?? 0) + (s.stats.late ?? 0)) / classes) * 100) : null }
+                  const av = s.stats.average
                   const [lv, c] = level(av)
                   return (
                     <tr key={s.id}>
@@ -132,6 +134,7 @@ export default async function Groups({ searchParams }: { searchParams: Promise<{
               <label className="fld"><span>اسم المجموعة</span><input name="name" defaultValue={g.name} required minLength={2} /></label>
               {teacherPick('e-teacher', g.teacher_id)}
               <label className="fld"><span>المواعيد</span><input name="schedule" defaultValue={g.schedule} /></label>
+              <label className="fld"><span>الاشتراك في الشهر (ج.م)</span><input id="e-fee" name="fee" type="number" min={0} step={10} defaultValue={g.monthly_fee} required /></label>
               <Submit>حفظ</Submit>
             </form>
             <div className="actions sep">
@@ -158,7 +161,7 @@ export default async function Groups({ searchParams }: { searchParams: Promise<{
         {assignments?.length ? (
           <ul className="list">
             {assignments.map((w) => {
-              const sent = (work ?? []).filter((x) => x.assignment_id === w.id && here.has(x.student_id)).length
+              const sent = sentFor.get(w.id) ?? 0
               return (
                 <li key={w.id}>
                   <div><Link className="link" href={`/homework/${w.id}`}><b>{w.title}</b></Link><div className="muted small">{w.questions} سؤال · {fDay(dayOf(w.created_at))}</div></div>
@@ -193,10 +196,13 @@ export default async function Groups({ searchParams }: { searchParams: Promise<{
               <label className="fld"><span>موبايل الطالب (هيدخل بيه)</span><input id="s-phone" name="phone" type="tel" placeholder="01xxxxxxxxx" dir="ltr" required /></label>
               <label className="fld"><span>كلمة السر</span><input id="s-password" name="password" minLength={6} dir="ltr" required /></label>
               <label className="fld"><span>موبايل ولي الأمر</span><input id="s-parent" name="parent" type="tel" placeholder="01xxxxxxxxx" dir="ltr" /></label>
-              <label className="fld"><span>اشتراك المجموعة دي في الشهر (ج.م)</span><input id="s-fee" name="fee" type="number" min={0} step={10} defaultValue={300} /></label>
               <Submit>إضافة الطالب</Submit>
             </form>
-            <p className="muted small">الطالب عنده حساب في مجموعة تانية؟ اكتب نفس رقم موبايله، وهيتضاف هنا بنفس حسابه.</p>
+            <p className="muted small">
+              {admin
+                ? 'الطالب عنده حساب في مجموعة تانية؟ اكتب نفس رقم موبايله، وهيتضاف هنا بنفس حسابه. الطالب بيدفع اشتراك المجموعة، ولو له اشتراك خاص عدّله من ملفه.'
+                : 'لو الطالب عنده حساب في السنتر قبل كده (بياخد مادة تانية)، الإدارة هي اللي تضيفه لمجموعتك.'}
+            </p>
           </details>
           <details className="panel add">
             <summary>إضافة قائمة طلاب مرة واحدة</summary>

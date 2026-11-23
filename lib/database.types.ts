@@ -65,14 +65,14 @@ isOneToOne: false
                   ]
                 },"enrollments": {
                   Row: {
-                    "group_id": string,"joined_at": string,"monthly_fee": number,"student_id": string
+                    "group_id": string,"joined_at": string,"student_id": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "group_id": string,"joined_at"?: string,"monthly_fee"?: number,"student_id": string
+                    "group_id": string,"joined_at"?: string,"student_id": string
                   }
                   Update: {
-                    "group_id"?: string,"joined_at"?: string,"monthly_fee"?: number,"student_id"?: string
+                    "group_id"?: string,"joined_at"?: string,"student_id"?: string
                   }
                   Relationships: [
                     {
@@ -117,14 +117,14 @@ isOneToOne: true
                   ]
                 },"groups": {
                   Row: {
-                    "archived_at": string | null,"created_at": string,"id": string,"name": string,"schedule": string,"teacher_id": string
+                    "archived_at": string | null,"created_at": string,"id": string,"monthly_fee": number,"name": string,"schedule": string,"teacher_id": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "archived_at"?: string | null,"created_at"?: string,"id"?: string,"name": string,"schedule"?: string,"teacher_id": string
+                    "archived_at"?: string | null,"created_at"?: string,"id"?: string,"monthly_fee"?: number,"name": string,"schedule"?: string,"teacher_id": string
                   }
                   Update: {
-                    "archived_at"?: string | null,"created_at"?: string,"id"?: string,"name"?: string,"schedule"?: string,"teacher_id"?: string
+                    "archived_at"?: string | null,"created_at"?: string,"id"?: string,"monthly_fee"?: number,"name"?: string,"schedule"?: string,"teacher_id"?: string
                   }
                   Relationships: [
                     {
@@ -207,6 +207,32 @@ isOneToOne: false
                   Relationships: [
                     
                   ]
+                },"special_fees": {
+                  Row: {
+                    "group_id": string,"monthly_fee": number,"student_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "group_id": string,"monthly_fee": number,"student_id": string
+                  }
+                  Update: {
+                    "group_id"?: string,"monthly_fee"?: number,"student_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "special_fees_student_id_group_id_fkey"
+      columns: ["student_id","group_id"]
+isOneToOne: true
+      referencedRelation: "enrollments"
+      referencedColumns: ["student_id","group_id"]
+    },{
+      foreignKeyName: "special_fees_student_id_group_id_fkey"
+      columns: ["student_id","group_id"]
+isOneToOne: true
+      referencedRelation: "student_stats"
+      referencedColumns: ["student_id","group_id"]
+    }
+                  ]
                 },"submissions": {
                   Row: {
                     "assignment_id": string,"created_at": string,"id": string,"photo_paths": (string)[],"status": string,"student_id": string
@@ -226,6 +252,12 @@ isOneToOne: false
       referencedRelation: "assignments"
       referencedColumns: ["id"]
     },{
+      foreignKeyName: "submissions_assignment_id_fkey"
+      columns: ["assignment_id"]
+isOneToOne: false
+      referencedRelation: "homework_counts"
+      referencedColumns: ["assignment_id"]
+    },{
       foreignKeyName: "submissions_student_id_fkey"
       columns: ["student_id"]
 isOneToOne: false
@@ -236,10 +268,87 @@ isOneToOne: false
                 }
           }
           Views: {
-            [_ in never]: never
+            "absent_twice": {
+                  Row: {
+                    "group_id": string,"student_id": string
+                  }
+                  ComputedFields: never
+                  Relationships: [
+                    {
+      foreignKeyName: "attendance_group_id_fkey"
+      columns: ["group_id"]
+isOneToOne: false
+      referencedRelation: "groups"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "attendance_student_id_fkey"
+      columns: ["student_id"]
+isOneToOne: false
+      referencedRelation: "profiles"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"homework_counts": {
+                  Row: {
+                    "assignment_id": string,"group_id": string,"sent": number | null,"waiting": number | null
+                  }
+                  ComputedFields: never
+                  Relationships: [
+                    {
+      foreignKeyName: "assignments_group_id_fkey"
+      columns: ["group_id"]
+isOneToOne: false
+      referencedRelation: "groups"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"last_class": {
+                  Row: {
+                    "came": number | null,"day": string,"group_id": string,"total": number | null
+                  }
+                  ComputedFields: never
+                  Relationships: [
+                    {
+      foreignKeyName: "attendance_group_id_fkey"
+      columns: ["group_id"]
+isOneToOne: false
+      referencedRelation: "groups"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"student_stats": {
+                  Row: {
+                    "absent": number | null,"average": number | null,"classes": number | null,"graded": number | null,"group_id": string,"late": number | null,"present": number | null,"student_id": string
+                  }
+                  ComputedFields: never
+                  Relationships: [
+                    {
+      foreignKeyName: "enrollments_group_id_fkey"
+      columns: ["group_id"]
+isOneToOne: false
+      referencedRelation: "groups"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "enrollments_student_id_fkey"
+      columns: ["student_id"]
+isOneToOne: false
+      referencedRelation: "profiles"
+      referencedColumns: ["id"]
+    }
+                  ]
+                }
           }
           Functions: {
-            "in_group":
+            "cairo_today":
+{ Args: Record<PropertyKey, never>; Returns: string
+                           },
+"drop_orphan_login":
+{ Args: { "mail": string }; Returns: boolean
+                           },
+"grade_submission":
+{ Args: { "n_correct": number,"n_wrong": number,"seen": string,"sub": string,"teacher_note": string }; Returns: string
+                           },
+"in_group":
 { Args: { "g": string }; Returns: boolean
                            },
 "is_admin":
@@ -253,6 +362,12 @@ isOneToOne: false
                            },
 "schema_version":
 { Args: Record<PropertyKey, never>; Returns: number
+                           },
+"sent_to":
+{ Args: { "a": string }; Returns: boolean
+                           },
+"solution_slot":
+{ Args: { "path": string }; Returns: boolean
                            },
 "teacher_can":
 { Args: { "perm": string }; Returns: boolean
@@ -268,6 +383,9 @@ isOneToOne: false
                            },
 "teaches_submission":
 { Args: { "sub": string }; Returns: boolean
+                           },
+"was_in_group":
+{ Args: { "g": string }; Returns: boolean
                            }
           }
           Enums: {

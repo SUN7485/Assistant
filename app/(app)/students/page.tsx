@@ -1,16 +1,16 @@
 import Link from 'next/link'
 import { need, isStaff } from '@/lib/me'
+import { all as readAll } from '@/lib/data'
 import { byName, cleanPhone, nStudents } from '@/lib/util'
 
 /** Every student in one list, found by name or number. A teacher sees their own. */
 export default async function Students({ searchParams }: { searchParams: Promise<{ q?: string; f?: string }> }) {
   const { sb, me } = await need(isStaff)
   const { q = '', f } = await searchParams
-  const { data } = await sb
-    .from('profiles')
-    .select('id, full_name, phone, parent_phone, enrollments(group:groups(id, name, archived_at))')
-    .eq('role', 'student')
-  const all = (data ?? []).sort(byName)
+  const everyone = await readAll((a, b) =>
+    sb.from('profiles').select('id, full_name, phone, parent_phone, enrollments(group:groups(id, name, archived_at))', { count: 'exact' }).eq('role', 'student').order('id').range(a, b),
+  )
+  const all = everyone.sort(byName)
   const term = q.trim(), digits = cleanPhone(term)
   const noGroup = (s: (typeof all)[number]) => !s.enrollments.some((e) => !e.group.archived_at)
   const loose = all.filter(noGroup)

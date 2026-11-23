@@ -2,21 +2,22 @@ import { need, isAdmin } from '@/lib/me'
 import { addNotice, deleteNotice } from '@/app/actions/money'
 import { CopyButton } from '@/components/CopyButton'
 import { Submit } from '@/components/Submit'
-import { attendanceOf, average, byName, fDay, fMonth, fTime, level, money, pct, thisMonth, wa } from '@/lib/util'
+import { all } from '@/lib/data'
+import { attendanceOf, average, byName, fDay, feeOf, fMonth, fTime, level, money, pct, thisMonth, wa } from '@/lib/util'
 
 export default async function Reports({ searchParams }: { searchParams: Promise<{ s?: string }> }) {
   const { sb } = await need(isAdmin)
   const { s: asked } = await searchParams
   const month = thisMonth()
-  const [{ data: groups }, { data: students }, { data: notices }] = await Promise.all([
-    sb.from('groups').select('id, name, archived_at, teacher:profiles!groups_teacher_id_fkey(full_name)').order('created_at'),
-    sb.from('profiles').select('id, full_name, parent_phone, enrollments(group_id, monthly_fee)').eq('role', 'student'),
+  const [{ data: groups }, students, { data: notices }] = await Promise.all([
+    sb.from('groups').select('id, name, monthly_fee, archived_at, teacher:profiles!groups_teacher_id_fkey(full_name)').order('created_at'),
+    all((a, b) => sb.from('profiles').select('id, full_name, parent_phone, enrollments(group_id, special_fees(monthly_fee))', { count: 'exact' }).eq('role', 'student').order('id').range(a, b)),
     sb.from('notices').select('id, group_id, body, created_at').order('created_at', { ascending: false }).limit(20),
   ])
   const live = (groups ?? []).filter((g) => !g.archived_at)
   const group = new Map(live.map((g) => [g.id, g]))
   // only what the student is in now, in groups that are running
-  const ss = (students ?? []).map((x) => ({ ...x, enrollments: x.enrollments.filter((e) => group.has(e.group_id)) })).sort(byName)
+  const ss = students.map((x) => ({ ...x, enrollments: x.enrollments.filter((e) => group.has(e.group_id)) })).sort(byName)
   const s = ss.find((x) => x.id === asked) ?? ss[0]
 
   let report = ''
@@ -47,7 +48,7 @@ export default async function Reports({ searchParams }: { searchParams: Promise<
     }
     report = [
       `تقرير الطالب: ${s.full_name}`,
-      ...(s.enrollments.length ? s.enrollments.flatMap((e, i) => [...(many && i ? [''] : []), ...part(e.group_id, e.monthly_fee)]) : ['مش متسجل في مجموعة دلوقتي.']),
+      ...(s.enrollments.length ? s.enrollments.flatMap((e, i) => [...(many && i ? [''] : []), ...part(e.group_id, feeOf(group.get(e.group_id)!, e.special_fees))]) : ['مش متسجل في مجموعة دلوقتي.']),
       ...(many ? [''] : []),
       'مع تحيات إدارة السنتر',
     ].join('\n')

@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { can, need } from '@/lib/me'
 import { deleteAttendanceDay, saveAttendance } from '@/app/actions/daily'
 import { Submit } from '@/components/Submit'
+import { all } from '@/lib/data'
 import { byName, fDay, isDay, today } from '@/lib/util'
 
 const CHOICES = [['present', 'حاضر'], ['late', 'متأخر'], ['absent', 'غايب']] as const
@@ -13,13 +14,13 @@ export default async function Attendance({ searchParams }: { searchParams: Promi
   const g = groups?.find((x) => x.id === asked) ?? groups?.[0]
   if (!g) return (<><h1 className="h">الحضور والغياب</h1><p className="empty">مفيش مجموعات لسه.</p></>)
   const day = d && isDay(d) && d <= today() ? d : today()
-  const [{ data: roster }, { data: taken }, { data: past }] = await Promise.all([
-    sb.from('enrollments').select('student:profiles(id, full_name)').eq('group_id', g.id),
-    sb.from('attendance').select('student_id, status').eq('group_id', g.id).eq('day', day),
+  const [roster, taken, { data: past }] = await Promise.all([
+    all((a, b) => sb.from('enrollments').select('student:profiles(id, full_name)', { count: 'exact' }).eq('group_id', g.id).order('student_id').range(a, b)),
+    all((a, b) => sb.from('attendance').select('student_id, status', { count: 'exact' }).eq('group_id', g.id).eq('day', day).order('student_id').range(a, b)),
     sb.from('attendance').select('day').eq('group_id', g.id).order('day', { ascending: false }).limit(400),
   ])
-  const students = (roster ?? []).map((r) => r.student).sort(byName)
-  const was = new Map((taken ?? []).map((r) => [r.student_id, r.status]))
+  const students = roster.map((r) => r.student).sort(byName)
+  const was = new Map(taken.map((r) => [r.student_id, r.status]))
   const days = [...new Set((past ?? []).map((r) => r.day))].slice(0, 6)
 
   return (
@@ -48,7 +49,7 @@ export default async function Attendance({ searchParams }: { searchParams: Promi
         <input type="hidden" name="day" value={day} />
         <div className="row">
           <h2>{fDay(day)}</h2>
-          <span className="muted small">{taken?.length ? 'الحصة دي متسجلة، وأي تعديل هيتحفظ عليها.' : 'الكل متعلّم حاضر. غيّر الغايب والمتأخر بس.'}</span>
+          <span className="muted small">{taken.length ? 'الحصة دي متسجلة، وأي تعديل هيتحفظ عليها.' : 'الكل متعلّم حاضر. غيّر الغايب والمتأخر بس.'}</span>
         </div>
         {students.length ? (
           <ul className="list roll">
@@ -71,7 +72,7 @@ export default async function Attendance({ searchParams }: { searchParams: Promi
         )}
         {!!students.length && <div><Submit>حفظ الحضور</Submit></div>}
       </form>
-      {!!taken?.length && (
+      {taken.length > 0 && (
         <details className="sure">
           <summary>الحصة اتسجلت في يوم غلط؟</summary>
           <p>هيتمسح حضور {fDay(day)} للمجموعة دي كله، وتسجله تاني في اليوم الصح.</p>

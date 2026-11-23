@@ -1,6 +1,6 @@
 'use server'
 
-import { back, isMonth, localPath, str } from '@/lib/util'
+import { back, feeOf, isMonth, localPath, str } from '@/lib/util'
 import { staffOnly } from './shared'
 
 /** Records that a student paid for one group for one month, or takes that back. */
@@ -14,9 +14,14 @@ export async function togglePayment(fd: FormData) {
     if (error) back(path, error.message, true)
     back(path, 'اتلغى تسجيل الدفع')
   }
-  const { data: e } = await sb.from('enrollments').select('monthly_fee, student:profiles(full_name)').eq('student_id', sid).eq('group_id', gid).maybeSingle()
+  const { data: e } = await sb
+    .from('enrollments')
+    .select('student:profiles(full_name), group:groups(monthly_fee), special_fees(monthly_fee)')
+    .eq('student_id', sid)
+    .eq('group_id', gid)
+    .maybeSingle()
   if (!e) back(path, 'الطالب مش في المجموعة دي', true)
-  const { error } = await sb.from('payments').insert({ student_id: sid, group_id: gid, month, amount: e.monthly_fee })
+  const { error } = await sb.from('payments').insert({ student_id: sid, group_id: gid, month, amount: feeOf(e.group, e.special_fees) })
   if (error) back(path, error.code === '23505' ? 'الاشتراك ده متسجل قبل كده' : error.message, true)
   back(path, `اتسجّل اشتراك ${e.student.full_name}`)
 }
