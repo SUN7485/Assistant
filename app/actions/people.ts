@@ -147,16 +147,23 @@ export async function addStudents(_: BulkResult | null, fd: FormData): Promise<B
   const lines = parseRoster(str(fd, 'list'))
   const out: BulkResult = { made: [], skipped: [] }
   if (!lines.length) return { ...out, error: 'الصق قائمة الطلاب: كل طالب في سطر' }
-  if (lines.length > 60) return { ...out, error: 'أقصى عدد 60 طالب في المرة. قسّم القائمة.' }
+  if (lines.length > 40) return { ...out, error: 'أقصى عدد 40 طالب في المرة. قسّم القائمة.' }
   const fee = int(fd, 'fee')
   const seen = new Set<string>()
-  for (const { line, ...s } of lines) {
-    if (!s.phone) { out.skipped.push({ line, why: 'مفيش رقم موبايل في السطر' }); continue }
-    if (seen.has(s.phone)) { out.skipped.push({ line, why: 'الرقم متكرر في القائمة' }); continue }
-    seen.add(s.phone)
-    const r = await addOne(sb, gid, { ...s, fee, password: easyPassword() })
-    if (!r.ok) out.skipped.push({ line, why: r.text })
-    else out.made.push({ name: s.name, phone: s.phone, password: r.password ?? null, note: r.password ? '' : 'عنده حساب قبل كده' })
+  const todo = lines.filter(({ line, phone }) => {
+    if (!phone) out.skipped.push({ line, why: 'مفيش رقم موبايل في السطر' })
+    else if (seen.has(phone)) out.skipped.push({ line, why: 'الرقم متكرر في القائمة' })
+    else return seen.add(phone)
+  })
+  // A few at a time: fast enough to finish well inside the server's time limit, gentle on the login service.
+  for (let i = 0; i < todo.length; i += 4) {
+    const batch = todo.slice(i, i + 4)
+    const done = await Promise.all(batch.map((s) => addOne(sb, gid, { name: s.name, phone: s.phone, parent: s.parent, fee, password: easyPassword() })))
+    done.forEach((r, j) => {
+      const s = batch[j]
+      if (!r.ok) out.skipped.push({ line: s.line, why: r.text })
+      else out.made.push({ name: s.name, phone: s.phone, password: r.password ?? null, note: r.password ? '' : 'عنده حساب قبل كده' })
+    })
   }
   return out
 }

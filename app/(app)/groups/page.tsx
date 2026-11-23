@@ -6,6 +6,9 @@ import { BulkAdd } from '@/components/BulkAdd'
 import { Submit } from '@/components/Submit'
 import { attendanceOf, average, byName, dayOf, fDay, fMonth, level, nStudents, pct, thisMonth } from '@/lib/util'
 
+// Adding a pasted class list makes an account per student; give it room to finish.
+export const maxDuration = 60
+
 export default async function Groups({ searchParams }: { searchParams: Promise<{ g?: string; archived?: string }> }) {
   const { sb, me } = await need(isStaff)
   const admin = me.role === 'admin'
