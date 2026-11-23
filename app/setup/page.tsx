@@ -5,9 +5,45 @@ import { Submit } from '@/components/Submit'
 
 export const dynamic = 'force-dynamic'
 
+/** Says what is wrong with the server's settings, instead of quietly sending the visitor to /login. */
+async function problem(): Promise<string | 'has-admin' | null> {
+  const missing = ['NEXT_PUBLIC_SUPABASE_URL', 'NEXT_PUBLIC_SUPABASE_ANON_KEY', 'SUPABASE_SERVICE_ROLE_KEY'].filter(
+    (k) => !process.env[k]?.trim(),
+  )
+  if (missing.length) return `ناقص في Vercel (Environment Variables): ${missing.join(', ')}`
+  try {
+    const { count, error } = await adminDb().from('profiles').select('id', { count: 'exact', head: true }).eq('role', 'admin')
+    if (error) {
+      if (error.code === '42P01' || error.code === 'PGRST205' || /does not exist|schema cache/.test(error.message))
+        return 'جداول قاعدة البيانات مش موجودة. شغّل ملفات supabase/migrations في Supabase SQL Editor.'
+      if (/api key|jwt|unauthori[sz]ed|forbidden/i.test(error.message) || error.code === '401')
+        return 'SUPABASE_SERVICE_ROLE_KEY مش مظبوط. انسخ الـ secret / service_role key تاني من Supabase.'
+      return 'قاعدة البيانات رفضت: ' + (error.message || error.code || 'خطأ غير معروف')
+    }
+    return count ? 'has-admin' : null
+  } catch (e) {
+    return 'السيرفر مش قادر يوصل لـ Supabase. راجع NEXT_PUBLIC_SUPABASE_URL: ' + (e instanceof Error ? e.message : String(e))
+  }
+}
+
 export default async function Setup() {
-  const { count, error } = await adminDb().from('profiles').select('id', { count: 'exact', head: true }).eq('role', 'admin')
-  if (error || count) redirect('/login')
+  const err = await problem()
+  if (err === 'has-admin') redirect('/login?msg=' + encodeURIComponent('حساب المدير معمول خلاص. ادخل بيه.'))
+  if (err)
+    return (
+      <main className="wrap login">
+        <div className="hero">
+          <span className="mark big">!</span>
+          <h1>المنصة مش جاهزة لسه</h1>
+        </div>
+        <div className="panel">
+          <p className="error" dir="auto">{err}</p>
+          <p className="muted small">
+            بعد ما تصلّح الإعدادات في Vercel، اعمل Redeploy (Deployments ← ⋯ ← Redeploy) وافتح الصفحة دي تاني.
+          </p>
+        </div>
+      </main>
+    )
   return (
     <main className="wrap login">
       <div className="hero">
