@@ -6,3 +6,5 @@ next-env.d.ts
 *.tsbuildinfo
 supabase/.branches
 supabase/.temp
+shots/
+app.log
