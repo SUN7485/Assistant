@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createBrowserClient } from '@supabase/ssr'
-import { submitSolution } from '@/app/actions'
+import { submitSolution } from '@/app/actions/daily'
 import { MAX_PAGES, pagesLabel } from '@/lib/pages'
 
 type Item = { id: string; title: string; state: 'none' | 'new' | 'reviewed' }

@@ -1,30 +1,24 @@
 import { cache } from 'react'
 import { redirect } from 'next/navigation'
 import { db } from './supabase'
+import type { Tables } from './database.types'
 
-export type Me = {
-  id: string
-  role: 'admin' | 'teacher' | 'student'
-  full_name: string
-  phone: string
-  subject: string | null
-  group_id: string | null
-  can_attendance: boolean
-  can_grade: boolean
-  can_add_students: boolean
-  can_see_payments: boolean
-}
+export type Role = 'admin' | 'teacher' | 'student'
+export type Me = Omit<Tables<'profiles'>, 'role'> & { role: Role }
 
-/** The signed-in person and a database client acting as them. Once per request. */
+/**
+ * The signed-in person and a database client acting as them. Once per request.
+ * The session token is checked by its signature (no round trip when the project signs with a public key);
+ * the profile is then read with that same token, so a forged one reads nothing.
+ */
 export const getMe = cache(async () => {
   const sb = await db()
-  const {
-    data: { user },
-  } = await sb.auth.getUser()
-  if (!user) redirect('/login')
-  const { data } = await sb.from('profiles').select('*').eq('id', user.id).single()
-  if (!data) redirect('/login?err=' + encodeURIComponent('الحساب ده ملوش ملف. كلّم الإدارة.'))
-  return { sb, me: data as Me }
+  const { data } = await sb.auth.getClaims()
+  const uid = data?.claims.sub
+  if (!uid) redirect('/login')
+  const { data: me } = await sb.from('profiles').select('*').eq('id', uid).maybeSingle()
+  if (!me) redirect('/login?err=' + encodeURIComponent('الحساب ده ملوش ملف. كلّم الإدارة.'))
+  return { sb, me: me as Me }
 })
 
 export type Can = 'attendance' | 'grade' | 'add_students' | 'see_payments'

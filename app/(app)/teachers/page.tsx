@@ -1,5 +1,5 @@
 import { need, isAdmin } from '@/lib/me'
-import { addTeacher, resetPassword, savePermissions } from '../../actions'
+import { addTeacher, resetPassword, savePermissions, saveTeacher } from '@/app/actions/people'
 import { Submit } from '@/components/Submit'
 
 const PERMS = [
@@ -18,7 +18,7 @@ export default async function Teachers() {
   return (
     <>
       <h1 className="h">المدرسين والصلاحيات</h1>
-      <p className="lead">كل مدرس بيشوف مجموعاته وطلابه بس. علّم على اللي مسموح له يعمله واضغط حفظ.</p>
+      <p className="lead">كل مدرس بيشوف مجموعاته وطلابه بس. علّم على اللي مسموح له يعمله واضغط حفظ. المدرس اللي ساب السنتر: انقل مجموعاته لمدرس تاني من صفحة المجموعات وغيّر كلمة سره.</p>
       {teachers?.length ? (
         <div className="grid">
           {teachers.map((t) => (
@@ -41,6 +41,16 @@ export default async function Teachers() {
                 <div><Submit className="btn sm">حفظ الصلاحيات</Submit></div>
               </form>
               <details>
+                <summary className="link small">تعديل البيانات</summary>
+                <form action={saveTeacher} className="form" style={{ paddingTop: 8 }}>
+                  <input type="hidden" name="id" value={t.id} />
+                  <label className="fld"><span>الاسم</span><input name="name" defaultValue={t.full_name} required minLength={2} /></label>
+                  <label className="fld"><span>المادة</span><input name="subject" defaultValue={t.subject ?? ''} required /></label>
+                  <label className="fld"><span>الموبايل (بيدخل بيه)</span><input name="phone" type="tel" defaultValue={t.phone} dir="ltr" required /></label>
+                  <div><Submit className="btn sm ghost2">حفظ البيانات</Submit></div>
+                </form>
+              </details>
+              <details>
                 <summary className="link small">تغيير كلمة السر</summary>
                 <form action={resetPassword} className="actions" style={{ paddingTop: 8 }}>
                   <input type="hidden" name="id" value={t.id} />
@@ -60,7 +70,7 @@ export default async function Teachers() {
         <form action={addTeacher} className="formgrid">
           <label className="fld"><span>الاسم</span><input id="t-name" name="name" placeholder="أ. ..." required minLength={2} /></label>
           <label className="fld"><span>المادة</span><input id="t-subject" name="subject" placeholder="مثلاً: رياضيات" required /></label>
-          <label className="fld"><span>الموبايل (هيدخل بيه)</span><input id="t-phone" name="phone" type="tel" placeholder="01xxxxxxxxx" pattern="01[0-9]{9}" dir="ltr" required /></label>
+          <label className="fld"><span>الموبايل (هيدخل بيه)</span><input id="t-phone" name="phone" type="tel" placeholder="01xxxxxxxxx" dir="ltr" required /></label>
           <label className="fld"><span>كلمة السر</span><input id="t-password" name="password" minLength={6} dir="ltr" required /></label>
           <Submit>إضافة المدرس</Submit>
         </form>

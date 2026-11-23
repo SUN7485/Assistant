@@ -1,9 +1,8 @@
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 
-export const PHONE = /^01[0-9]{9}$/
-/** Supabase signs people in by email; each phone number gets a fixed address that is never mailed. */
-export const loginEmail = (phone: string) => `${phone}@phone.assistant.local`
+import { cleanPhone } from './phone'
+export { PHONE, cleanPhone, latin, loginEmail } from './phone'
 
 // ---------- dates: the centre is in Cairo, the server is not ----------
 const TZ = 'Africa/Cairo'
@@ -47,15 +46,29 @@ export function attendanceOf(rows: { status: string }[]) {
   const total = rows.length
   return { ...c, total, pct: total ? Math.round(((c.present + c.late) / total) * 100) : null }
 }
+export const byName = <T extends { full_name: string }>(a: T, b: T) => a.full_name.localeCompare(b.full_name, 'ar')
+/** "3 طلاب", the way it is said. */
+export const count = (n: number, one: string, two: string, few: string, many: string) =>
+  n === 1 ? one : n === 2 ? two : n >= 3 && n <= 10 ? `${n} ${few}` : `${n} ${many}`
+export const nStudents = (n: number) => (n === 0 ? 'مفيش طلاب' : count(n, 'طالب واحد', 'طالبين', 'طلاب', 'طالب'))
 export const average = (xs: number[]) => (xs.length ? Math.round(xs.reduce((a, b) => a + b, 0) / xs.length) : null)
 
 export const wa = (phone: string, text: string) => `https://wa.me/2${phone}?text=${encodeURIComponent(text)}`
 
 // ---------- form input ----------
 export const str = (fd: FormData, k: string) => String(fd.get(k) ?? '').trim()
+/** A phone number as typed, in whatever digits and spacing, made plain. */
+export const phone = (fd: FormData, k: string) => cleanPhone(str(fd, k))
+export const isId = (s: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s)
 export const int = (fd: FormData, k: string) => {
   const n = Number(fd.get(k))
   return Number.isInteger(n) ? n : NaN
+}
+
+/** Where a form asks to be sent back to: a page of this app, never another site. */
+export const localPath = (fd: FormData, fallback: string) => {
+  const p = str(fd, 'back')
+  return /^\/(?!\/)[^\\]*$/.test(p) ? p : fallback
 }
 
 /** Server actions only: go back to a page with a message the toast shows, and refresh the header's counts. */

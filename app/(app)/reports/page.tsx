@@ -1,50 +1,58 @@
 import { need, isAdmin } from '@/lib/me'
-import { addNotice } from '../../actions'
+import { addNotice, deleteNotice } from '@/app/actions/money'
 import { CopyButton } from '@/components/CopyButton'
 import { Submit } from '@/components/Submit'
-import { attendanceOf, average, fDay, fMonth, fTime, level, money, pct, thisMonth, wa } from '@/lib/util'
+import { attendanceOf, average, byName, fDay, fMonth, fTime, level, money, pct, thisMonth, wa } from '@/lib/util'
 
 export default async function Reports({ searchParams }: { searchParams: Promise<{ s?: string }> }) {
   const { sb } = await need(isAdmin)
   const { s: asked } = await searchParams
   const month = thisMonth()
   const [{ data: groups }, { data: students }, { data: notices }] = await Promise.all([
-    sb.from('groups').select('id, name, teacher:profiles!groups_teacher_id_fkey(full_name)').order('created_at'),
-    sb.from('profiles').select('id, full_name, group_id, parent_phone, monthly_fee').eq('role', 'student').order('full_name'),
+    sb.from('groups').select('id, name, archived_at, teacher:profiles!groups_teacher_id_fkey(full_name)').order('created_at'),
+    sb.from('profiles').select('id, full_name, parent_phone, enrollments(group_id, monthly_fee)').eq('role', 'student'),
     sb.from('notices').select('id, group_id, body, created_at').order('created_at', { ascending: false }).limit(20),
   ])
-  const ss = students ?? []
+  const live = (groups ?? []).filter((g) => !g.archived_at)
+  const group = new Map(live.map((g) => [g.id, g]))
+  // only what the student is in now, in groups that are running
+  const ss = (students ?? []).map((x) => ({ ...x, enrollments: x.enrollments.filter((e) => group.has(e.group_id)) })).sort(byName)
   const s = ss.find((x) => x.id === asked) ?? ss[0]
-  const groupName = (id: string | null) => groups?.find((g) => g.id === id)?.name ?? ''
 
   let report = ''
   if (s) {
     const [{ data: att }, { data: work }, { data: paid }] = await Promise.all([
-      sb.from('attendance').select('day, status').eq('student_id', s.id).order('day', { ascending: false }),
-      sb.from('submissions').select('created_at, assignment:assignments(title), grades(correct, wrong, note)').eq('student_id', s.id).eq('status', 'reviewed').order('created_at'),
-      sb.from('payments').select('amount').eq('student_id', s.id).eq('month', month).maybeSingle(),
+      sb.from('attendance').select('day, status, group_id').eq('student_id', s.id).order('day', { ascending: false }),
+      sb.from('submissions').select('created_at, assignment:assignments(title, group_id), grades(correct, wrong, note)').eq('student_id', s.id).eq('status', 'reviewed').order('created_at'),
+      sb.from('payments').select('group_id').eq('student_id', s.id).eq('month', month),
     ])
-    const a = attendanceOf(att ?? [])
-    const graded = (work ?? []).flatMap((w) => {
-      const g = w.grades as unknown as { correct: number; wrong: number; note: string } | null
-      return g ? [{ ...g, title: (w.assignment as unknown as { title: string }).title }] : []
-    })
-    const av = average(graded.map((g) => pct(g.correct, g.wrong)))
-    const last = graded[graded.length - 1]
-    const lastAbsent = att?.find((r) => r.status === 'absent')
-    const g = groups?.find((x) => x.id === s.group_id)
+    const many = s.enrollments.length > 1
+    const part = (gid: string, fee: number) => {
+      const g = group.get(gid)!
+      const rows = (att ?? []).filter((r) => r.group_id === gid)
+      const a = attendanceOf(rows)
+      const graded = (work ?? []).flatMap((w) => (w.grades && w.assignment.group_id === gid ? [{ ...w.grades, title: w.assignment.title }] : []))
+      const av = average(graded.map((x) => pct(x.correct, x.wrong)))
+      const last = graded[graded.length - 1]
+      const lastAbsent = rows.find((r) => r.status === 'absent')
+      return [
+        `${many ? '◂ ' : 'المجموعة: '}${g.name}${g.teacher ? ' — ' + g.teacher.full_name : ''}`,
+        `الحضور: حضر ${a.present + a.late} من ${a.total} حصة (غاب ${a.absent}، اتأخر ${a.late})`,
+        lastAbsent ? `آخر غياب: ${fDay(lastAbsent.day)}` : '',
+        `الدرجات: متوسط ${av == null ? '—' : av + '%'} — المستوى: ${level(av)[0]}`,
+        last ? `آخر واجب: ${last.title} — ${last.correct} من ${last.correct + last.wrong}` : '',
+        last?.note ? `ملاحظة المدرس: ${last.note}` : '',
+        `اشتراك ${fMonth(month)}: ${paid?.some((p) => p.group_id === gid) ? 'مدفوع' : 'لسه مدفعش (' + money(fee) + ')'}`,
+      ].filter(Boolean)
+    }
     report = [
       `تقرير الطالب: ${s.full_name}`,
-      `المجموعة: ${g?.name ?? ''}${g?.teacher ? ' — ' + (g.teacher as unknown as { full_name: string }).full_name : ''}`,
-      `الحضور: حضر ${a.present + a.late} من ${a.total} حصة (غاب ${a.absent}، اتأخر ${a.late})`,
-      lastAbsent ? `آخر غياب: ${fDay(lastAbsent.day)}` : '',
-      `الدرجات: متوسط ${av == null ? '—' : av + '%'} — المستوى: ${level(av)[0]}`,
-      last ? `آخر واجب: ${last.title} — ${last.correct} من ${last.correct + last.wrong}` : '',
-      last?.note ? `ملاحظة المدرس: ${last.note}` : '',
-      `اشتراك ${fMonth(month)}: ${paid ? 'مدفوع' : 'لسه مدفعش (' + money(s.monthly_fee) + ')'}`,
+      ...(s.enrollments.length ? s.enrollments.flatMap((e, i) => [...(many && i ? [''] : []), ...part(e.group_id, e.monthly_fee)]) : ['مش متسجل في مجموعة دلوقتي.']),
+      ...(many ? [''] : []),
       'مع تحيات إدارة السنتر',
-    ].filter(Boolean).join('\n')
+    ].join('\n')
   }
+  const names = (x: (typeof ss)[number]) => x.enrollments.map((e) => group.get(e.group_id)!.name).join('، ')
 
   return (
     <>
@@ -57,11 +65,7 @@ export default async function Reports({ searchParams }: { searchParams: Promise<
               <label className="fld inline">
                 <span>الطالب</span>
                 <select id="s" name="s" defaultValue={s.id} key={s.id}>
-                  {(groups ?? []).map((g) => (
-                    <optgroup key={g.id} label={g.name}>
-                      {ss.filter((x) => x.group_id === g.id).map((x) => <option key={x.id} value={x.id}>{x.full_name}</option>)}
-                    </optgroup>
-                  ))}
+                  {ss.map((x) => <option key={x.id} value={x.id}>{x.full_name}{x.enrollments.length ? ' — ' + names(x) : ''}</option>)}
                 </select>
               </label>
               <button className="btn sm ghost2">اعرض التقرير</button>
@@ -82,16 +86,17 @@ export default async function Reports({ searchParams }: { searchParams: Promise<
       </section>
 
       <section className="panel">
-        <h2>إشعار لأولياء الأمور</h2>
+        <h2>إشعار للطلاب وأولياء الأمور</h2>
         <form action={addNotice} className="form">
           <label className="fld">
             <span>لمين</span>
             <select id="n-group" name="group">
               <option value="all">كل المجموعات</option>
-              {(groups ?? []).map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
+              {live.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
             </select>
           </label>
           <label className="fld"><span>الرسالة</span><textarea id="n-body" name="body" rows={3} maxLength={1000} required placeholder="مثلاً: حصة السبت اتأجلت للأحد الساعة 4" /></label>
+          <p className="muted small">الطلاب بيشوفوا الإشعار أول ما يفتحوا المنصة. أولياء الأمور بتبعتهولهم واتساب من القائمة اللي تحت.</p>
           <div><Submit>جهّز الإشعار</Submit></div>
         </form>
       </section>
@@ -101,11 +106,11 @@ export default async function Reports({ searchParams }: { searchParams: Promise<
           <h2>إشعارات اتجهزت</h2>
           <ul className="list">
             {notices.map((n) => {
-              const to = ss.filter((x) => x.parent_phone && (!n.group_id || x.group_id === n.group_id))
+              const to = ss.filter((x) => x.parent_phone && (!n.group_id || x.enrollments.some((e) => e.group_id === n.group_id)))
               return (
                 <li key={n.id}>
                   <div>
-                    <b>{n.group_id ? groupName(n.group_id) : 'كل المجموعات'}</b> <span className="muted small">{fTime(n.created_at)}</span>
+                    <b>{n.group_id ? (groups?.find((g) => g.id === n.group_id)?.name ?? '') : 'كل المجموعات'}</b> <span className="muted small">{fTime(n.created_at)}</span>
                     <p>{n.body}</p>
                     <details>
                       <summary className="link small">ابعتها لأولياء الأمور واحد واحد ({to.length})</summary>
@@ -114,6 +119,10 @@ export default async function Reports({ searchParams }: { searchParams: Promise<
                       </div>
                     </details>
                   </div>
+                  <form action={deleteNotice}>
+                    <input type="hidden" name="id" value={n.id} />
+                    <Submit className="link small">امسحه</Submit>
+                  </form>
                 </li>
               )
             })}

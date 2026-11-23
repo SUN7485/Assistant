@@ -1,48 +1,44 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { can, need } from '@/lib/me'
-import { grade } from '../../../actions'
+import { grade } from '@/app/actions/daily'
+import { Marks } from '@/components/Marks'
 import { PageViewer } from '@/components/PageViewer'
 import { Submit } from '@/components/Submit'
 import { pagesLabel } from '@/lib/pages'
-import { fTime } from '@/lib/util'
+import { fTime, isId } from '@/lib/util'
 
 export default async function GradeOne({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   const { sb } = await need((me) => can(me, 'grade'))
-  const { data } = await sb
+  if (!isId(id)) notFound()
+  const { data: x } = await sb
     .from('submissions')
-    .select('id, status, created_at, photo_paths, student:profiles(full_name), assignment:assignments(title, questions), grades(correct, wrong, note)')
+    .select('id, status, created_at, photo_paths, student:profiles(id, full_name), assignment:assignments(id, title, questions, group:groups(name)), grades(correct, wrong, note)')
     .eq('id', id)
     .maybeSingle()
-  if (!data) notFound()
-  const x = data as unknown as {
-    id: string; status: string; created_at: string; photo_paths: string[]
-    student: { full_name: string }; assignment: { title: string; questions: number }
-    grades: { correct: number; wrong: number; note: string } | null
-  }
+  if (!x) notFound()
   const { data: signed } = await sb.storage.from('solutions').createSignedUrls(x.photo_paths, 3600)
   const pages = (signed ?? []).flatMap((u) => (u.signedUrl ? [u.signedUrl] : []))
   const g = x.grades
 
   return (
     <>
-      <Link className="link back" href="/grading">→ رجوع لقائمة الحلول</Link>
+      <Link className="link back" href={x.status === 'new' ? '/grading' : '/grading?tab=reviewed'}>→ رجوع لقائمة الحلول</Link>
       <div className="grade">
         <PageViewer key={x.id} pages={pages} name={x.student.full_name} />
         <form action={grade} className="panel form" key={x.id}>
           <input type="hidden" name="id" value={x.id} />
           <div className="row">
             <div>
-              <h2>{x.student.full_name}</h2>
-              <div className="muted small">{x.assignment.title} · {x.assignment.questions} سؤال · {pagesLabel(x.photo_paths.length)} · اتبعت {fTime(x.created_at)}</div>
+              <h2><Link className="link plain" href={`/students/${x.student.id}`}>{x.student.full_name}</Link></h2>
+              <div className="muted small">
+                <Link className="link plain" href={`/homework/${x.assignment.id}`}>{x.assignment.title}</Link> · {x.assignment.group.name} · {x.assignment.questions} سؤال · {pagesLabel(x.photo_paths.length)} · اتبعت {fTime(x.created_at)}
+              </div>
             </div>
             {g && <div className="result">{g.correct}<small>من {g.correct + g.wrong}</small></div>}
           </div>
-          <div className="two">
-            <label className="fld"><span>✓ صح</span><input id="correct" name="correct" type="number" inputMode="numeric" min={0} max={x.assignment.questions} defaultValue={g?.correct} required /></label>
-            <label className="fld"><span>✗ غلط</span><input id="wrong" name="wrong" type="number" inputMode="numeric" min={0} max={x.assignment.questions} defaultValue={g?.wrong} required /></label>
-          </div>
+          <Marks questions={x.assignment.questions} correct={g?.correct} wrong={g?.wrong} />
           <label className="fld">
             <span>تصحيح الأخطاء والملاحظة</span>
             <textarea id="note" name="note" rows={4} maxLength={2000} placeholder="مثلاً: السؤال 4 — نسيت تغيّر الإشارة" defaultValue={g?.note} />

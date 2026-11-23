@@ -14,11 +14,13 @@ export async function proxy(request: NextRequest) {
       },
     },
   })
-  const {
-    data: { user },
-  } = await sb.auth.getUser()
-  const open = ['/login', '/setup'].some((p) => request.nextUrl.pathname.startsWith(p))
-  if (!user && !open) return NextResponse.redirect(new URL('/login', request.url))
+  // Renews an expired session, then checks the token's signature: locally when the project signs with a
+  // public key (new Supabase projects do), otherwise by asking Supabase.
+  const { data } = await sb.auth.getClaims()
+  const path = request.nextUrl.pathname
+  const open = ['/login', '/setup'].some((p) => path.startsWith(p))
+  if (!data?.claims && !open) return NextResponse.redirect(new URL('/login', request.url))
+  if (data?.claims && path === '/login' && !request.nextUrl.searchParams.has('err')) return NextResponse.redirect(new URL('/', request.url))
   return response
 }
 
