@@ -1,0 +1,52 @@
+name: CI
+
+# Every push is checked the way a release would be: types, lint, unit tests, the access rules
+# against a real database, then one full day in a real browser as manager, teacher and student.
+on:
+  push:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+
+      - name: Types, lint, unit tests, install.sql up to date
+        run: npm run check
+
+      - name: Start a local Supabase with every migration applied
+        run: npm run db:start && npm run db:env
+
+      - name: Who can see and change what
+        run: npm run test:rls
+
+      - name: Build
+        run: npm run build
+
+      - name: One day in a real browser
+        run: |
+          npx playwright install --with-deps chromium
+          npm start > app.log 2>&1 &
+          for i in $(seq 1 30); do curl -sf -o /dev/null http://localhost:3000/login && break; sleep 1; done
+          mkdir -p shots
+          SHOTS=shots npm run test:walk
+
+      - name: Keep the screenshots and the app log when something fails
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: walk
+          path: |
+            shots
+            app.log

@@ -1,6 +1,8 @@
 import Link from 'next/link'
 import { getMe, type Me } from '@/lib/me'
 import { MIGRATION, SCHEMA, schemaBehind } from '@/lib/schema'
+import { sql } from '@/lib/sql'
+import { CopyButton } from '@/components/CopyButton'
 import { Nav } from '@/components/Nav'
 import { logout } from '@/app/actions/auth'
 
@@ -31,8 +33,9 @@ function items(me: Me, newWork: number) {
 }
 
 /** The code was deployed before its database change was run: say so plainly instead of failing page by page. */
-function Behind({ me, by }: { me: Me; by: number }) {
+async function Behind({ me, by }: { me: Me; by: number }) {
   const files = Object.entries(MIGRATION).filter(([v]) => Number(v) > SCHEMA - by).map(([, f]) => f)
+  const text = me.role === 'admin' ? (await Promise.all(files.map((f) => sql('migrations', f)))).join('\n\n') : ''
   return (
     <main className="wrap login">
       <div className="hero">
@@ -43,10 +46,11 @@ function Behind({ me, by }: { me: Me; by: number }) {
         <div className="panel">
           <p>نسخة المنصة الجديدة اشتغلت، وقاعدة البيانات لسه على القديم. علشان تكمّل:</p>
           <ol className="steps">
-            <li>افتح Supabase ← SQL Editor.</li>
-            <li>شغّل {files.length > 1 ? 'الملفات دي بالترتيب' : 'الملف ده'} من فولدر <span dir="ltr">supabase/migrations</span>: {files.map((f) => <b key={f} dir="ltr"> {f} </b>)}</li>
-            <li>حدّث الصفحة دي.</li>
+            <li>{text ? <CopyButton text={text} label="انسخ ملف التحديث" /> : <>افتح {files.length > 1 ? 'الملفات دي بالترتيب' : 'الملف ده'} من فولدر <span dir="ltr">supabase/migrations</span>: {files.map((f) => <b key={f} dir="ltr"> {f} </b>)}</>}</li>
+            <li>افتح Supabase ← SQL Editor، الصق اللي نسخته، واضغط Run واستنى <span dir="ltr">Success</span>.</li>
+            <li>ارجع هنا وحدّث الصفحة.</li>
           </ol>
+          {text && <p className="muted small">الملف اسمه <span dir="ltr">{files.join(' , ')}</span> في فولدر <span dir="ltr">supabase/migrations</span>.</p>}
           <p className="muted small">لحد ما ده يتعمل، الطلاب والمدرسين شايفين إن المنصة بتتحدّث.</p>
         </div>
       ) : (

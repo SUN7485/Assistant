@@ -21,7 +21,9 @@ export function LoginForm() {
     try {
       const sb = createBrowserClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!)
       const { error } = await sb.auth.signInWithPassword({ email: loginEmail(phone), password: String(fd.get('password') ?? '') })
-      if (!error) return location.assign('/') // a full load, so the server sees the new session
+      // a full page load on purpose, so the server sees the new session and no signed-out page is left cached
+      // eslint-disable-next-line @next/next/no-location-assign-relative-destination
+      if (!error) return location.assign('/')
       setErr(error.status === 429 ? 'ناس كتير بتدخل دلوقتي. استنى دقيقة وجرّب تاني' : error.status === 400 ? 'الرقم أو كلمة السر غلط' : 'مفيش اتصال بالمنصة. اتأكد من النت وجرّب تاني')
     } catch {
       setErr('مفيش اتصال بالمنصة. اتأكد من النت وجرّب تاني')

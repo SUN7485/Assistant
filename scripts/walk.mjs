@@ -1,6 +1,7 @@
-// Walks one day through the real app in Chromium: manager, teacher and student.
-// Needs: local Supabase running with a fresh database (npx supabase db reset), the app on BASE
-// (npm run build && npm start), and Playwright with Chromium installed.
+// Walks one day through the real app in Chromium: manager, two teachers and students.
+// Needs a fresh local database and the app running on BASE:
+//   npm run db:start && npm run db:env && npm run db:reset && npm run build && npm start &
+//   npm run test:walk
 import { createRequire } from 'node:module'
 import { deflateSync } from 'node:zlib'
 const { chromium } = createRequire(import.meta.url)('playwright') // global install works too (NODE_PATH)
@@ -314,6 +315,16 @@ await page.click('summary:has-text("تعديل المجموعة")'); await page.
 check(await seen('اتأرشفت') && await has(page.locator('a', { hasText: 'المجموعات المؤرشفة (1)' })), 'archived a group')
 await go('/payments')
 check((await page.locator('#lines li', { hasText: 'فيزياء الأحد' }).count()) === 0, 'an archived group leaves the payments list')
+// a group and a homework made by mistake are deleted; a group with anything recorded in it is not
+const mistake = await addGroup('مجموعة بالغلط', 'أ. تجربة أول — رياضيات', '')
+await addHomework(mistake, 'واجب بالغلط', '5')
+await page.click('a:has-text("واجب بالغلط")'); await page.waitForURL('**/homework/**')
+await page.click('summary:has-text("تعديل الواجب")'); await page.click('summary:has-text("مسح الواجب")'); await page.click('button:has-text("أيوه، امسحه")'); await page.waitForURL('**/groups?g=**')
+check(await seen('اتمسح الواجب'), 'deleted a homework')
+await page.click('summary:has-text("تعديل المجموعة")'); await page.click('button:has-text("مسح المجموعة")'); await page.waitForURL('**/groups?**')
+check(await seen('اتمسحت المجموعة') && !(await page.locator('.chipbtn', { hasText: 'مجموعة بالغلط' }).count()), 'deleted an empty group')
+await page.goto(groupUrl); await page.click('summary:has-text("تعديل المجموعة")')
+check((await page.locator('button:has-text("مسح المجموعة")').count()) === 0, 'a group with students and homework offers archiving, not deleting')
 await go('/home')
 check(await page.locator('text=غاب آخر حصتين').count() === 0, 'nobody flagged for two absences')
 await shot('home'); await wide('home')

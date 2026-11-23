@@ -6,8 +6,16 @@
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "check": "npm run typecheck && npm run lint && npm test && node scripts/bundle-sql.mjs --check",
     "db:start": "supabase start -x studio,imgproxy,edge-runtime,logflare,vector,supavisor,realtime,mailpit,postgres-meta",
-    "test:rls": "psql \"${DB_URL:-postgresql://postgres:postgres@127.0.0.1:54322/postgres}\" -q -f supabase/tests/rls.sql"
+    "db:env": "node scripts/local-env.mjs",
+    "db:reset": "supabase db reset",
+    "db:types": "supabase gen types typescript --schema public > lib/database.types.ts",
+    "db:bundle": "node scripts/bundle-sql.mjs",
+    "test:rls": "psql \"${DB_URL:-postgresql://postgres:postgres@127.0.0.1:54322/postgres}\" -q -f supabase/tests/rls.sql",
+    "test:walk": "node scripts/walk.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.7",
@@ -20,6 +28,9 @@
     "@types/node": "^26.6.6",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
+    "eslint": "^9.39.5",
+    "eslint-config-next": "^16.4.6",
+    "playwright": "1.63.0",
     "supabase": "^3.1.0",
     "typescript": "^5.9.3",
     "vitest": "^5.1.1"

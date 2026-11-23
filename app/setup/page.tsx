@@ -1,12 +1,14 @@
 import { redirect } from 'next/navigation'
 import { setup } from '@/app/actions/auth'
 import { adminDb } from '@/lib/supabase'
+import { CopyButton } from '@/components/CopyButton'
 import { Submit } from '@/components/Submit'
+import { sql } from '@/lib/sql'
 
 export const dynamic = 'force-dynamic'
 
 /** Says what is wrong with the server's settings, instead of quietly sending the visitor to /login. */
-async function problem(): Promise<string | 'has-admin' | null> {
+async function problem(): Promise<string | 'has-admin' | 'no-tables' | null> {
   const missing = ['NEXT_PUBLIC_SUPABASE_URL', 'NEXT_PUBLIC_SUPABASE_ANON_KEY', 'SUPABASE_SERVICE_ROLE_KEY'].filter(
     (k) => !process.env[k]?.trim(),
   )
@@ -18,7 +20,7 @@ async function problem(): Promise<string | 'has-admin' | null> {
       if (status === 401 || status === 403)
         return `SUPABASE_SERVICE_ROLE_KEY مش مظبوط (${status}). انسخ الـ secret / service_role key تاني من Supabase. ${error.message ?? ''}`
       if (error.code === '42P01' || error.code === 'PGRST205' || /does not exist|schema cache/.test(error.message))
-        return 'جداول قاعدة البيانات مش موجودة. شغّل ملفات supabase/migrations في Supabase SQL Editor.'
+        return 'no-tables'
       if (/api key|jwt|unauthori[sz]ed|forbidden/i.test(error.message) || error.code === '401')
         return 'SUPABASE_SERVICE_ROLE_KEY مش مظبوط. انسخ الـ secret / service_role key تاني من Supabase.'
       return `قاعدة البيانات رفضت (${status}): ` + ([error.code, error.message, error.hint].filter(Boolean).join(' — ') || 'من غير سبب')
@@ -32,6 +34,25 @@ async function problem(): Promise<string | 'has-admin' | null> {
 export default async function Setup() {
   const err = await problem()
   if (err === 'has-admin') redirect('/login?msg=' + encodeURIComponent('حساب المدير معمول خلاص. ادخل بيه.'))
+  if (err === 'no-tables') {
+    const install = await sql('install.sql')
+    return (
+      <main className="wrap login">
+        <div className="hero">
+          <span className="mark big">1</span>
+          <h1>جهّز قاعدة البيانات</h1>
+          <p className="muted">المنصة وصلت لـ Supabase، بس الجداول لسه متعملتش. دي بتتعمل مرة واحدة:</p>
+        </div>
+        <div className="panel">
+          <ol className="steps">
+            <li>{install ? <CopyButton text={install} label="انسخ ملف التجهيز" /> : <>افتح ملف <span dir="ltr">supabase/install.sql</span> وانسخه كله.</>}</li>
+            <li>افتح Supabase ← SQL Editor، الصق اللي نسخته، واضغط Run واستنى <span dir="ltr">Success</span>.</li>
+            <li>ارجع هنا وحدّث الصفحة، واعمل حساب المدير.</li>
+          </ol>
+        </div>
+      </main>
+    )
+  }
   if (err)
     return (
       <main className="wrap login">

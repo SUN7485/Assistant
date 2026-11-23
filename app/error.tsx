@@ -11,6 +11,8 @@ export default function Failed({ error, reset }: { error: Error & { digest?: str
       </div>
       <div className="actions">
         <button className="btn" onClick={reset}>جرّب تاني</button>
+        {/* a full page load on purpose: whatever broke should not survive in memory */}
+        {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
         <a className="btn ghost2" href="/">الصفحة الرئيسية</a>
       </div>
       {error.digest && <p className="muted small">لو المشكلة فضلت، ابعت الرقم ده للدعم: <span dir="ltr">{error.digest}</span></p>}
