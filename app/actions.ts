@@ -1,7 +1,9 @@
 'use server'
 
+import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { can, getMe, type Me } from '@/lib/me'
+import { MAX_PAGES, pagesLabel } from '@/lib/pages'
 import { adminDb, db } from '@/lib/supabase'
 import { PHONE, back, int, isDay, isMonth, loginEmail, str, today } from '@/lib/util'
 
@@ -177,7 +179,8 @@ export async function grade(fd: FormData) {
     .from('grades')
     .upsert({ submission_id: id, correct, wrong, note, graded_by: me.id, graded_at: new Date().toISOString() })
   if (error) back(path, 'الدرجة مترصدتش: ' + error.message, true)
-  await sb.from('submissions').update({ status: 'reviewed' }).eq('id', id)
+  const { error: e2 } = await sb.from('submissions').update({ status: 'reviewed' }).eq('id', id)
+  if (e2) back(path, 'الدرجة اترصدت بس الحل لسه ظاهر إنه مستني. جرّب تحفظ تاني: ' + e2.message, true)
   const { data: next } = await sb
     .from('submissions')
     .select('id')
@@ -220,17 +223,42 @@ export async function addNotice(fd: FormData) {
 
 // ---------- student ----------
 
-/** Called after the photo is in storage. Returns an error message, or null. */
-export async function submitSolution(assignmentId: string, path: string): Promise<string | null> {
+/** Called after the photos are in storage, with their paths in page order. Returns an error message, or null. */
+export async function submitSolution(assignmentId: string, paths: string[]): Promise<string | null> {
   const { sb, me } = await getMe()
   if (me.role !== 'student') return 'الرفع للطلاب بس'
-  if (!path.startsWith(me.id + '/') || path.includes('..')) return 'الصورة مش في المكان الصحيح'
+  if (!Array.isArray(paths) || !paths.length) return 'صوّر صفحة واحدة على الأقل'
+  if (paths.length > MAX_PAGES) return `أقصى عدد ${pagesLabel(MAX_PAGES)} للحل الواحد`
+  // Each page is "<student id>/<assignment id>-<anything>". The database checks the same thing.
+  const prefix = `${me.id}/${assignmentId}-`
+  const mine = (p: unknown) => typeof p === 'string' && p.startsWith(prefix) && !p.includes('..')
+  if (!paths.every(mine) || new Set(paths).size !== paths.length) return 'الصور مش في المكان الصحيح'
+
+  const { data: before } = await sb
+    .from('submissions')
+    .select('status, photo_paths')
+    .eq('assignment_id', assignmentId)
+    .eq('student_id', me.id)
+    .maybeSingle()
+  if (before?.status === 'reviewed') return 'الأستاذ راجع الحل ده خلاص، ومش هينفع يتبعت تاني'
   const { error } = await sb
     .from('submissions')
     .upsert(
-      { assignment_id: assignmentId, student_id: me.id, photo_path: path, status: 'new', created_at: new Date().toISOString() },
+      { assignment_id: assignmentId, student_id: me.id, photo_paths: paths, status: 'new', created_at: new Date().toISOString() },
       { onConflict: 'assignment_id,student_id' },
     )
-  if (error) return 'الأستاذ راجع الحل ده خلاص، ومش هينفع يتبعت تاني'
+  if (error) return 'الحل متبعتش. حدّث الصفحة وجرّب تاني، ولو فضلت المشكلة كلّم الأستاذ.'
+
+  // Photos this replaced are no longer shown to anyone, so they leave storage. Students cannot delete
+  // from storage themselves; the paths come from this student's own row, which was checked above.
+  const gone = ((before?.photo_paths ?? []) as string[]).filter((p) => mine(p) && !paths.includes(p))
+  if (gone.length) {
+    try {
+      await adminDb().storage.from('solutions').remove(gone)
+    } catch {
+      // the solution is saved either way; a leftover photo only costs space
+    }
+  }
+  revalidatePath('/', 'layout')
   return null
 }

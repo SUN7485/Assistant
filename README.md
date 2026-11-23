@@ -6,7 +6,7 @@ A tutoring-centre platform in Egyptian Arabic. Three kinds of account, each sign
 |---|---|
 | **Manager** (مدير المنصة) | Everything: teachers and their permissions, groups, students, attendance, grading, subscriptions, reports to parents, notices |
 | **Teacher** (مدرس) | Only their own groups. Attendance, grading, adding students and seeing payments only if the manager ticked that permission |
-| **Student** (طالب) | Photographs a homework solution and sends it, and sees their own attendance. **Never** sees right/wrong counts or the teacher's notes |
+| **Student** (طالب) | Photographs a homework solution, one photo per page (up to 10 pages), and sends it; can add a forgotten page until the teacher has reviewed it. Sees their own attendance. **Never** sees right/wrong counts or the teacher's notes |
 
 The "student never sees grades" rule is enforced by the database (PostgreSQL row-level security), not just by hiding it on screen. `supabase/tests/rls.sql` proves it.
 
@@ -21,6 +21,7 @@ Built with Next.js (on Vercel) and Supabase (database, logins, photo storage). S
 2. Open **SQL Editor** and run every file in `supabase/migrations/`, one at a time, **oldest first** (the date is in the file name). For each one: paste the whole file, press **Run**, and wait for *Success* before the next. Today that is:
    1. `20261113000000_init.sql`
    2. `20261114000000_tighten.sql`
+   3. `20261123000000_pages.sql`
 3. Open **Authentication → Sign In / Providers** and turn **off** "Allow new users to sign up". Accounts are made only by the manager inside the app.
 4. Open **Project Settings → API Keys** (or the **Connect** button) and copy three things:
    - the **Project URL**
@@ -64,11 +65,12 @@ npx supabase db reset && npm run build && npm start &
 node scripts/walk.mjs       # one full day in a real browser: manager, teacher, student (needs Playwright)
 ```
 
-A database change goes in a **new** file under `supabase/migrations/`, plus a check in `supabase/tests/rls.sql` when it touches who can see what. On the live project, paste the new file into the SQL Editor.
+A database change goes in a **new** file under `supabase/migrations/`, plus a check in `supabase/tests/rls.sql` when it touches who can see what. On the live project, paste the new file into the SQL Editor at the same time as the new code goes live: the code and the database have to match (for example, `20261123000000_pages.sql` must be run when the multi-page upload is deployed, or sending and grading stop working until it is).
 
 ### Where things are
 - `supabase/migrations/` — tables, access rules, photo bucket
 - `app/actions.ts` — every save: each one checks who is calling before it writes
 - `app/(app)/*/page.tsx` — the screens
-- `components/UploadForm.tsx` — the student's camera: shrinks the photo on the phone, then uploads it
+- `components/UploadForm.tsx` — the student's camera: shrinks each page's photo on the phone, then uploads them
+- `components/PageViewer.tsx` — the teacher turning the pages of a solution
 - `lib/` — sign-in helpers, dates (Cairo time), figures

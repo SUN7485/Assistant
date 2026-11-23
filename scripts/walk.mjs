@@ -2,6 +2,7 @@
 // Needs: local Supabase running with a fresh database (npx supabase db reset), the app on BASE
 // (npm run build && npm start), and Playwright with Chromium installed.
 import { createRequire } from 'node:module'
+import { deflateSync } from 'node:zlib'
 const { chromium } = createRequire(import.meta.url)('playwright') // global install works too (NODE_PATH)
 
 const BASE = process.env.BASE ?? 'http://localhost:3000'
@@ -28,6 +29,20 @@ async function login(phone, password, lands) {
   check(ok, `${phone} lands on ${lands}`)
   await page.waitForLoadState('networkidle')
 }
+// A plain grey PNG of a given size, standing in for a photo. Each page gets its own width so their order can be checked.
+function png(w, h) {
+  const crc = (b) => { let c = ~0; for (const x of b) { c ^= x; for (let k = 0; k < 8; k++) c = (c >>> 1) ^ (0xedb88320 & -(c & 1)) } return ~c >>> 0 }
+  const chunk = (type, data) => {
+    const body = Buffer.concat([Buffer.from(type), data]), out = Buffer.alloc(body.length + 8)
+    out.writeUInt32BE(data.length); body.copy(out, 4); out.writeUInt32BE(crc(body), body.length + 4)
+    return out
+  }
+  const head = Buffer.alloc(13); head.writeUInt32BE(w); head.writeUInt32BE(h, 4); head[8] = 8; head[9] = 2
+  const rows = Buffer.alloc(h * (1 + w * 3), 0x99); for (let y = 0; y < h; y++) rows[y * (1 + w * 3)] = 0
+  return Buffer.concat([Buffer.from('89504e470d0a1a0a', 'hex'), chunk('IHDR', head), chunk('IDAT', deflateSync(rows)), chunk('IEND', Buffer.alloc(0))])
+}
+const photo = (w) => ({ name: `page-${w}.png`, mimeType: 'image/png', buffer: png(w, 400) })
+const widths = (sel) => page.locator(sel).evaluateAll((imgs) => Promise.all(imgs.map((i) => i.decode().then(() => i.naturalWidth, () => 0))))
 const logout = async () => { await page.click('button:has-text("خروج")'); await page.waitForURL('**/login') }
 
 // ---------- first run ----------
@@ -93,12 +108,34 @@ await logout()
 await login('01222222221', 'stud11', '/upload')
 const tabs = await page.locator('.tab').allTextContents()
 check(tabs.length === 2, 'student sees only two tabs: ' + tabs.join(' | '))
-const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAoAAAAKCAIAAAACUFjqAAAAEklEQVR4nGP4z8CAB+GTG8HSALfKY52fTcuYAAAAAElFTkSuQmCC', 'base64')
-await page.setInputFiles('#shot', { name: 'solution.png', mimeType: 'image/png', buffer: png })
-await page.click('button:has-text("ابعت الحل للأستاذ")')
+// three pages: one from the camera, then three picked together, then one of them thrown away
+await page.setInputFiles('#shot', photo(300))
+await page.waitForSelector('text=صفحة 1 من 1')
+await page.setInputFiles('#pick', [photo(310), photo(320), photo(330)])
+await page.waitForSelector('text=صفحة 4 من 4')
+check(true, 'student added four pages, from the camera and from the gallery')
+await page.click('.thumb >> nth=1'); await page.click('button:has-text("امسح الصفحة")')
+await page.waitForSelector('text=من 3')
+await page.click('.thumb >> nth=2'); await page.click('button:has-text("قدّمها")')
+check(String(await widths('.thumb img')) === '300,330,320', 'student removed a page and moved another earlier')
+await shot('student-pages'); await wide('upload with pages')
+await page.click('button:has-text("ابعت الحل للأستاذ (3 صفحات)")')
 await page.waitForURL('**/upload?msg=**', { timeout: 15000 }).catch(() => {})
-check(await seen('وصل للأستاذ'), 'student photo reached the teacher')
-await page.waitForSelector('text=وصل للأستاذ')
+check(await seen('وصل للأستاذ — 3 صفحات'), 'student\'s three pages reached the teacher')
+await page.waitForSelector('text=ده اللي وصل للأستاذ')
+check(String(await widths('.thumb img')) === '300,330,320', 'student can look at the pages they sent')
+check((await page.locator('button:has-text("ابعت الحل")').count()) === 0, 'nothing to send again until something changes')
+// forgot a page: add it and send again
+await page.setInputFiles('#shot', photo(340))
+await page.click('button:has-text("ابعت الحل للأستاذ (4 صفحات)")')
+check(await seen('وصل للأستاذ — 4 صفحات'), 'student added a forgotten page and sent again')
+await page.waitForSelector('.list >> text=4 صفحات')
+// change of mind: drop the second page; the teacher must end up with three and storage must let go of the fourth
+await page.waitForSelector('text=ده اللي وصل للأستاذ')
+await page.click('.thumb >> nth=1'); await page.click('button:has-text("امسح الصفحة")')
+await page.click('button:has-text("ابعت الحل للأستاذ (3 صفحات)")')
+check(await seen('وصل للأستاذ — 3 صفحات'), 'student took a page back out')
+await page.waitForSelector('.list >> text=3 صفحات')
 await shot('student-upload'); await wide('upload')
 await go('/my-attendance')
 check((await page.locator('.stat .v').first().textContent()) === '1', 'student sees their own attendance')
@@ -116,10 +153,15 @@ await logout()
 
 // ---------- teacher grades ----------
 await login('01111111111', 'teach1', '/grading')
+check((await page.locator('.sub .cover span').textContent()) === '3 صفحات', 'grading list says how many pages')
 await page.click('.sub')
 await page.waitForURL('**/grading/**')
-const loaded = await page.locator('.photo img').evaluate((img) => img.complete && img.naturalWidth > 0)
-check(loaded, 'teacher sees the student\'s photo')
+check(String(await widths('.pager img')) === '300,320,340', 'teacher sees the student\'s pages in order')
+await page.click('button:has-text("اللي بعدها")')
+check(await page.locator('#viewer-count', { hasText: 'صفحة 2 من 3' }).waitFor({ timeout: 5000 }).then(() => true, () => false), 'teacher can turn to the next page')
+await page.click('.viewer .thumb >> nth=2')
+check(await page.locator('#viewer-count', { hasText: 'صفحة 3 من 3' }).waitFor({ timeout: 5000 }).then(() => true, () => false), 'teacher can jump to a page')
+await shot('teacher-pages'); await wide('grading one')
 await page.fill('#correct', '15'); await page.fill('#wrong', '9')
 await page.click('button:has-text("رصد الدرجة")'); await page.waitForURL('**/grading/**')
 check(await seen('أكتر من 20'), 'more answers than questions is refused')

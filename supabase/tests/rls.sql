@@ -23,9 +23,9 @@ insert into profiles (id, role, full_name, phone, group_id) values
 insert into assignments (id, group_id, title, questions, created_by) values
   ('00000000-0000-0000-0000-0000000000e1', '00000000-0000-0000-0000-0000000000d1', 'Work One', 10, '00000000-0000-0000-0000-0000000000b1'),
   ('00000000-0000-0000-0000-0000000000e2', '00000000-0000-0000-0000-0000000000d2', 'Work Two', 10, '00000000-0000-0000-0000-0000000000b2');
-insert into submissions (id, assignment_id, student_id, photo_path) values
-  ('00000000-0000-0000-0000-0000000000f1', '00000000-0000-0000-0000-0000000000e1', '00000000-0000-0000-0000-0000000000c1', '00000000-0000-0000-0000-0000000000c1/one.jpg'),
-  ('00000000-0000-0000-0000-0000000000f2', '00000000-0000-0000-0000-0000000000e2', '00000000-0000-0000-0000-0000000000c2', '00000000-0000-0000-0000-0000000000c2/two.jpg');
+insert into submissions (id, assignment_id, student_id, photo_paths) values
+  ('00000000-0000-0000-0000-0000000000f1', '00000000-0000-0000-0000-0000000000e1', '00000000-0000-0000-0000-0000000000c1', array['00000000-0000-0000-0000-0000000000c1/00000000-0000-0000-0000-0000000000e1-one.jpg']),
+  ('00000000-0000-0000-0000-0000000000f2', '00000000-0000-0000-0000-0000000000e2', '00000000-0000-0000-0000-0000000000c2', array['00000000-0000-0000-0000-0000000000c2/00000000-0000-0000-0000-0000000000e2-two.jpg']);
 insert into grades (submission_id, correct, wrong, note, graded_by) values
   ('00000000-0000-0000-0000-0000000000f1', 7, 3, 'check question 4', '00000000-0000-0000-0000-0000000000b1');
 insert into attendance (group_id, student_id, day, status, recorded_by) values
@@ -69,7 +69,7 @@ begin
   exception when insufficient_privilege then null; end;
 
   begin
-    insert into submissions (assignment_id, photo_path) values ('00000000-0000-0000-0000-0000000000e2', auth.uid()::text || '/x.jpg');
+    insert into submissions (assignment_id, photo_paths) values ('00000000-0000-0000-0000-0000000000e2', array[auth.uid()::text || '/00000000-0000-0000-0000-0000000000e2-x.jpg']);
     raise exception 'student sent work to another group''s assignment';
   exception when insufficient_privilege then null; end;
 
@@ -79,13 +79,37 @@ begin
   exception when insufficient_privilege then null; end;
 
   begin
-    update submissions set photo_path = '00000000-0000-0000-0000-0000000000c2/two.jpg' where id = '00000000-0000-0000-0000-0000000000f1';
+    update submissions set photo_paths = array['00000000-0000-0000-0000-0000000000c2/00000000-0000-0000-0000-0000000000e2-two.jpg'] where id = '00000000-0000-0000-0000-0000000000f1';
     raise exception 'student pointed their work at another student''s photo';
   exception when insufficient_privilege then null; end;
 
-  update submissions set photo_path = auth.uid()::text || '/again.jpg' where id = '00000000-0000-0000-0000-0000000000f1';
+  begin
+    update submissions set photo_paths = array[auth.uid()::text || '/00000000-0000-0000-0000-0000000000e1-ok.jpg', '00000000-0000-0000-0000-0000000000c2/00000000-0000-0000-0000-0000000000e2-two.jpg'] where id = '00000000-0000-0000-0000-0000000000f1';
+    raise exception 'student slipped another student''s photo in as a second page';
+  exception when insufficient_privilege then null; end;
+
+  begin
+    update submissions set photo_paths = array[auth.uid()::text || '/00000000-0000-0000-0000-0000000000e2-x.jpg'] where id = '00000000-0000-0000-0000-0000000000f1';
+    raise exception 'student pointed their work at a photo of a different homework';
+  exception when insufficient_privilege then null; end;
+
+  begin
+    update submissions set photo_paths = '{}' where id = '00000000-0000-0000-0000-0000000000f1';
+    raise exception 'student sent a solution with no pages';
+  exception when check_violation then null; end;
+
+  begin
+    update submissions set photo_paths = (select array_agg(auth.uid()::text || '/00000000-0000-0000-0000-0000000000e1-' || i || '.jpg') from generate_series(1, 11) i)
+      where id = '00000000-0000-0000-0000-0000000000f1';
+    raise exception 'student sent more than 10 pages';
+  exception when check_violation then null; end;
+
+  -- several pages, and sending again before it is reviewed
+  update submissions set photo_paths = array[auth.uid()::text || '/00000000-0000-0000-0000-0000000000e1-again-1.jpg', auth.uid()::text || '/00000000-0000-0000-0000-0000000000e1-again-2.jpg']
+    where id = '00000000-0000-0000-0000-0000000000f1';
   get diagnostics n = row_count;
   assert n = 1, 'student cannot resend work before it is reviewed';
+  assert (select cardinality(photo_paths) from submissions) = 2, 'the second page was not kept';
 
   begin
     insert into storage.objects (bucket_id, name) values ('solutions', '00000000-0000-0000-0000-0000000000c2/x.jpg');
@@ -101,7 +125,7 @@ set local role authenticated;
 do $$
 declare n int;
 begin
-  update submissions set photo_path = auth.uid()::text || '/late.jpg' where id = '00000000-0000-0000-0000-0000000000f1';
+  update submissions set photo_paths = array[auth.uid()::text || '/00000000-0000-0000-0000-0000000000e1-late.jpg'] where id = '00000000-0000-0000-0000-0000000000f1';
   get diagnostics n = row_count;
   assert n = 0, 'student replaced reviewed work';
   assert (select status from submissions) = 'reviewed', 'student cannot see that work was reviewed';
@@ -151,6 +175,11 @@ begin
   begin
     update submissions set student_id = '00000000-0000-0000-0000-0000000000c2' where id = '00000000-0000-0000-0000-0000000000f1';
     raise exception 'teacher moved a solution to another student';
+  exception when raise_exception then null; end;
+
+  begin
+    update submissions set photo_paths = array['00000000-0000-0000-0000-0000000000c1/00000000-0000-0000-0000-0000000000e1-swapped.jpg'] where id = '00000000-0000-0000-0000-0000000000f1';
+    raise exception 'teacher changed the pages of a student''s solution';
   exception when raise_exception then null; end;
 
   delete from assignments where id = '00000000-0000-0000-0000-0000000000e1';

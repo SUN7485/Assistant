@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { need, isStaff } from '@/lib/me'
+import { can, need, isStaff } from '@/lib/me'
 import { resetPassword } from '../../../actions'
 import { Stat } from '@/components/Stat'
 import { Spark } from '@/components/Spark'
@@ -48,7 +48,7 @@ export default async function StudentFile({ params }: { params: Promise<{ id: st
           <ul className="list">
             {graded.slice().reverse().map((x) => (
               <li key={x.id}>
-                <div><b>{x.title}</b><div className="muted small">{fTime(x.at)}{x.note ? ' · ' + x.note : ''}</div></div>
+                <div>{can(me, 'grade') ? <Link className="link" href={`/grading/${x.id}`}><b>{x.title}</b></Link> : <b>{x.title}</b>}<div className="muted small">{fTime(x.at)}{x.note ? ' · ' + x.note : ''}</div></div>
                 <div className="score"><span className="ok">✓ {x.correct}</span><span className="bad">✗ {x.wrong}</span><b>{x.p}%</b></div>
               </li>
             ))}

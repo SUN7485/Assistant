@@ -2,7 +2,9 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { can, need } from '@/lib/me'
 import { grade } from '../../../actions'
+import { PageViewer } from '@/components/PageViewer'
 import { Submit } from '@/components/Submit'
+import { pagesLabel } from '@/lib/pages'
 import { fTime } from '@/lib/util'
 
 export default async function GradeOne({ params }: { params: Promise<{ id: string }> }) {
@@ -10,31 +12,30 @@ export default async function GradeOne({ params }: { params: Promise<{ id: strin
   const { sb } = await need((me) => can(me, 'grade'))
   const { data } = await sb
     .from('submissions')
-    .select('id, status, created_at, photo_path, student:profiles(full_name), assignment:assignments(title, questions), grades(correct, wrong, note)')
+    .select('id, status, created_at, photo_paths, student:profiles(full_name), assignment:assignments(title, questions), grades(correct, wrong, note)')
     .eq('id', id)
     .maybeSingle()
   if (!data) notFound()
   const x = data as unknown as {
-    id: string; status: string; created_at: string; photo_path: string
+    id: string; status: string; created_at: string; photo_paths: string[]
     student: { full_name: string }; assignment: { title: string; questions: number }
     grades: { correct: number; wrong: number; note: string } | null
   }
-  const { data: signed } = await sb.storage.from('solutions').createSignedUrl(x.photo_path, 3600)
+  const { data: signed } = await sb.storage.from('solutions').createSignedUrls(x.photo_paths, 3600)
+  const pages = (signed ?? []).flatMap((u) => (u.signedUrl ? [u.signedUrl] : []))
   const g = x.grades
 
   return (
     <>
       <Link className="link back" href="/grading">→ رجوع لقائمة الحلول</Link>
       <div className="grade">
-        <figure className="photo">
-          {signed ? <img src={signed.signedUrl} alt={'صورة حل ' + x.student.full_name} /> : <p className="muted">الصورة مش موجودة.</p>}
-        </figure>
+        <PageViewer key={x.id} pages={pages} name={x.student.full_name} />
         <form action={grade} className="panel form" key={x.id}>
           <input type="hidden" name="id" value={x.id} />
           <div className="row">
             <div>
               <h2>{x.student.full_name}</h2>
-              <div className="muted small">{x.assignment.title} · {x.assignment.questions} سؤال · اتبعت {fTime(x.created_at)}</div>
+              <div className="muted small">{x.assignment.title} · {x.assignment.questions} سؤال · {pagesLabel(x.photo_paths.length)} · اتبعت {fTime(x.created_at)}</div>
             </div>
             {g && <div className="result">{g.correct}<small>من {g.correct + g.wrong}</small></div>}
           </div>

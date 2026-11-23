@@ -67,7 +67,11 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .btn:disabled { opacity: .5; cursor: progress; }
 .btn.sm { padding: 6px 12px; font-size: .88rem; }
 .btn.ghost2 { background: transparent; color: var(--accent); border: 1.5px solid var(--accent); }
+.btn.ghost2.danger { color: var(--pen); border-color: var(--pen); }
+.btn.big { padding: 14px 18px; font-size: 1.05rem; }
 .link { background: none; border: 0; color: var(--accent); cursor: pointer; padding: 0; text-decoration: underline; text-underline-offset: 3px; }
+.link:disabled { opacity: .5; cursor: default; }
+.link.center { align-self: center; }
 .back { align-self: flex-start; text-decoration: none; }
 .chip { display: inline-block; padding: 2px 10px; border-radius: 999px; background: var(--soft); font-size: .82rem; white-space: nowrap; }
 .chip.ok { background: color-mix(in srgb, var(--ok) 16%, transparent); color: var(--ok); }
@@ -125,16 +129,31 @@ tr:last-child td { border-bottom: 0; }
 .subs { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; }
 .sub { flex-direction: row; align-items: flex-start; text-decoration: none; color: inherit; }
 .sub:hover { border-color: var(--accent); }
-.sub img { width: 88px; height: 88px; object-fit: cover; border-radius: 8px; border: 1px solid var(--line); flex: none; background: var(--soft); }
+.cover { position: relative; flex: none; width: 88px; height: 88px; }
+.cover img { display: block; width: 100%; height: 100%; object-fit: cover; border-radius: 8px; border: 1px solid var(--line); background: var(--soft); }
+.cover span, .thumb span { position: absolute; inset-inline-start: 4px; bottom: 4px; background: var(--ink); color: var(--bg); border-radius: 999px; font-size: .72rem; font-weight: 600; line-height: 18px; min-width: 18px; padding: 0 6px; text-align: center; }
 .sub > div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .grade { display: grid; grid-template-columns: 1.3fr 1fr; gap: 16px; align-items: start; }
-.photo { margin: 0; background: var(--soft); border-radius: 12px; padding: 8px; display: flex; justify-content: center; }
+.photo { margin: 0; background: var(--soft); border-radius: 12px; padding: 8px; display: flex; justify-content: center; align-items: center; }
 .photo img { max-height: 75vh; border-radius: 8px; object-fit: contain; }
+
+/* a solution's pages: on the teacher's side they sit side by side and snap one at a time, so a phone can swipe */
+.viewer { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.pager { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; background: var(--soft); border-radius: 12px; }
+.pager::-webkit-scrollbar { display: none; }
+.pager > .photo { flex: none; width: 100%; scroll-snap-align: start; scroll-snap-stop: always; background: none; cursor: zoom-in; }
+.thumbs { display: flex; gap: 8px; overflow-x: auto; padding: 3px; }
+.thumb { position: relative; flex: none; width: 58px; height: 74px; padding: 0; border: 2px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--soft); cursor: pointer; }
+.thumb.on { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.thumb img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.thumb span { padding: 0 4px; }
 .result { font-family: var(--f-display); font-size: 1.4rem; color: var(--pen); border: 2px solid var(--pen); border-radius: 50%; width: 84px; height: 84px; display: grid; place-items: center; transform: rotate(-6deg); line-height: 1.1; text-align: center; }
 .result small { font-size: .7rem; display: block; }
 
 /* student camera */
-.shoot { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 34px 16px; border: 2px dashed var(--accent); border-radius: 14px; cursor: pointer; text-align: center; background: color-mix(in srgb, var(--accent) 6%, transparent); }
+.shoot { display: flex; flex-direction: column; align-items: center; gap: 6px; width: 100%; padding: 34px 16px; border: 2px dashed var(--accent); border-radius: 14px; cursor: pointer; text-align: center; background: color-mix(in srgb, var(--accent) 6%, transparent); }
+.shoot:disabled { opacity: .6; cursor: progress; }
+.form .photo img { max-height: 52vh; }
 .shoot svg { width: 56px; height: 56px; color: var(--accent); }
 .shoot b { font-family: var(--f-display); font-size: 1.2rem; color: var(--accent); }
 .error { color: var(--pen); font-weight: 600; }
@@ -150,9 +169,13 @@ tr:last-child td { border-bottom: 0; }
 .login .hero { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; }
 .login h1 { font-size: 2rem; }
 
-#toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(18px + env(safe-area-inset-bottom, 0px)); background: var(--ink); color: var(--bg); padding: 10px 18px; border-radius: 10px; max-width: calc(100% - 32px); z-index: 20; box-shadow: 0 6px 24px rgba(0, 0, 0, .2); }
+/* centred with margins, not left: 50%, which would cap its width at half the screen and wrap short messages */
+#toast { position: fixed; left: 16px; right: 16px; width: fit-content; max-width: calc(100% - 32px); margin-inline: auto; text-align: center; bottom: calc(18px + env(safe-area-inset-bottom, 0px)); background: var(--ink); color: var(--bg); padding: 10px 18px; border-radius: 10px; z-index: 20; box-shadow: 0 6px 24px rgba(0, 0, 0, .2); }
 #toast.err { background: var(--pen); color: #fff; }
 
+@media (min-width: 761px) {
+  .grade > form { position: sticky; top: 16px; }
+}
 @media (max-width: 760px) {
   .grade { grid-template-columns: 1fr; }
   .h { font-size: 1.35rem; }
