@@ -12,15 +12,18 @@ async function problem(): Promise<string | 'has-admin' | null> {
   )
   if (missing.length) return `ناقص في Vercel (Environment Variables): ${missing.join(', ')}`
   try {
-    const { count, error } = await adminDb().from('profiles').select('id', { count: 'exact', head: true }).eq('role', 'admin')
+    // Not head: a HEAD request comes back with no error text, so a refusal would say nothing.
+    const { data, error, status } = await adminDb().from('profiles').select('id').eq('role', 'admin').limit(1)
     if (error) {
+      if (status === 401 || status === 403)
+        return `SUPABASE_SERVICE_ROLE_KEY مش مظبوط (${status}). انسخ الـ secret / service_role key تاني من Supabase. ${error.message ?? ''}`
       if (error.code === '42P01' || error.code === 'PGRST205' || /does not exist|schema cache/.test(error.message))
         return 'جداول قاعدة البيانات مش موجودة. شغّل ملفات supabase/migrations في Supabase SQL Editor.'
       if (/api key|jwt|unauthori[sz]ed|forbidden/i.test(error.message) || error.code === '401')
         return 'SUPABASE_SERVICE_ROLE_KEY مش مظبوط. انسخ الـ secret / service_role key تاني من Supabase.'
-      return 'قاعدة البيانات رفضت: ' + (error.message || error.code || 'خطأ غير معروف')
+      return `قاعدة البيانات رفضت (${status}): ` + ([error.code, error.message, error.hint].filter(Boolean).join(' — ') || 'من غير سبب')
     }
-    return count ? 'has-admin' : null
+    return data?.length ? 'has-admin' : null
   } catch (e) {
     return 'السيرفر مش قادر يوصل لـ Supabase. راجع NEXT_PUBLIC_SUPABASE_URL: ' + (e instanceof Error ? e.message : String(e))
   }
