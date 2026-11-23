@@ -14,9 +14,9 @@ export async function proxy(request: NextRequest) {
       },
     },
   })
-  const {
-    data: { user },
-  } = await sb.auth.getUser()
+  // getClaims checks the login's signature here instead of asking Supabase's auth server on every click.
+  const { data } = await sb.auth.getClaims()
+  const user = data?.claims.sub
   const open = ['/login', '/setup'].some((p) => request.nextUrl.pathname.startsWith(p))
   if (!user && !open) return NextResponse.redirect(new URL('/login', request.url))
   return response

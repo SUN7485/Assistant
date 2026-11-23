@@ -18,11 +18,10 @@ export type Me = {
 /** The signed-in person and a database client acting as them. Once per request. */
 export const getMe = cache(async () => {
   const sb = await db()
-  const {
-    data: { user },
-  } = await sb.auth.getUser()
-  if (!user) redirect('/login')
-  const { data } = await sb.from('profiles').select('*').eq('id', user.id).single()
+  const { data: auth } = await sb.auth.getClaims()
+  const id = auth?.claims.sub
+  if (!id) redirect('/login')
+  const { data } = await sb.from('profiles').select('*').eq('id', id).single()
   if (!data) redirect('/login?err=' + encodeURIComponent('الحساب ده ملوش ملف. كلّم الإدارة.'))
   return { sb, me: data as Me }
 })
