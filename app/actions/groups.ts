@@ -76,8 +76,8 @@ export async function saveAssignment(fd: FormData) {
   const questions = int(fd, 'questions')
   if (!(questions >= 1 && questions <= 200)) back(path, 'عدد الأسئلة من 1 لـ 200', true)
   // A grade already given cannot end up with more answers than the homework has questions (the database holds this too).
-  const { data: graded } = await sb.from('submissions').select('grades(correct, wrong)').eq('assignment_id', id)
-  const most = Math.max(0, ...(graded ?? []).map((s) => (s.grades ? s.grades.correct + s.grades.wrong : 0)))
+  const { data: graded } = await sb.from('submissions').select('grades(correct, wrong, unclear, blank)').eq('assignment_id', id)
+  const most = Math.max(0, ...(graded ?? []).map((s) => (s.grades ? s.grades.correct + s.grades.wrong + s.grades.unclear + s.grades.blank : 0)))
   if (questions < most) back(path, `فيه حل اتصحح على ${most} سؤال، فعدد الأسئلة مينفعش يقل عن كده`, true)
   const { data, error } = await sb.from('assignments').update({ title: str(fd, 'title'), questions }).eq('id', id).select('id')
   if (error?.message.includes('already graded')) back(path, 'فيه حل اتصحح على أسئلة أكتر من كده، فعدد الأسئلة مينفعش يقل', true)

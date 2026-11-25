@@ -14,7 +14,7 @@ export default async function GradeOne({ params }: { params: Promise<{ id: strin
   if (!isId(id)) notFound()
   const { data: x } = await sb
     .from('submissions')
-    .select('id, status, created_at, photo_paths, student:profiles(id, full_name), assignment:assignments(id, title, questions, group:groups(name)), grades(correct, wrong, note)')
+    .select('id, status, created_at, photo_paths, student:profiles(id, full_name), assignment:assignments(id, title, questions, group:groups(name)), grades(correct, wrong, unclear, blank, note)')
     .eq('id', id)
     .maybeSingle()
   if (!x) notFound()
@@ -40,12 +40,12 @@ export default async function GradeOne({ params }: { params: Promise<{ id: strin
             </div>
             {g && <div className="result">{g.correct}<small>من {g.correct + g.wrong}</small></div>}
           </div>
-          <Marks questions={x.assignment.questions} correct={g?.correct} wrong={g?.wrong} />
+          <Marks questions={x.assignment.questions} correct={g?.correct} wrong={g?.wrong} unclear={g?.unclear} blank={g?.blank} />
           <label className="fld">
             <span>تصحيح الأخطاء والملاحظة</span>
             <textarea id="note" name="note" rows={4} maxLength={2000} placeholder="مثلاً: السؤال 4 — نسيت تغيّر الإشارة" defaultValue={g?.note} />
           </label>
-          <p className="muted small">الطالب مش بيشوف عدد الصح والغلط ولا الملاحظة. بيشوف بس إن حله اتراجع.</p>
+          <p className="muted small">الطالب مش بيشوف عدد الصح والغلط ولا غير المفهوم ولا الملاحظة. بيشوف بس إن حله اتراجع.</p>
           <div><Submit>{g ? 'حفظ التعديل' : 'رصد الدرجة'}</Submit></div>
         </form>
       </div>

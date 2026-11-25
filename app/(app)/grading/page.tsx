@@ -1,14 +1,15 @@
 import Link from 'next/link'
 import { can, need } from '@/lib/me'
 import { pagesLabel } from '@/lib/pages'
-import { fTime, pct } from '@/lib/util'
+import { fTime } from '@/lib/util'
+import { Score } from '@/components/Score'
 
 export default async function Grading({ searchParams }: { searchParams: Promise<{ tab?: string }> }) {
   const { sb, me } = await need((me) => can(me, 'grade'))
   const tab = (await searchParams).tab === 'reviewed' ? 'reviewed' : 'new'
   const [{ data }, { count: nNew }, { count: nDone }] = await Promise.all([
     sb.from('submissions')
-      .select('id, created_at, photo_paths, student:profiles(full_name), assignment:assignments(title, group:groups(name)), grades(correct, wrong)')
+      .select('id, created_at, photo_paths, student:profiles(full_name), assignment:assignments(title, group:groups(name)), grades(correct, wrong, unclear, blank)')
       .eq('status', tab)
       .order('created_at', { ascending: tab === 'new' })
       .limit(100),
@@ -41,9 +42,7 @@ export default async function Grading({ searchParams }: { searchParams: Promise<
                 <span className="muted small">{x.assignment.title} · {x.assignment.group.name}</span>
                 <span className="muted small">{fTime(x.created_at)}</span>
                 {x.grades && (
-                  <span className="score">
-                    <span className="ok">✓ {x.grades.correct}</span><span className="bad">✗ {x.grades.wrong}</span><b>{pct(x.grades.correct, x.grades.wrong)}%</b>
-                  </span>
+                  <Score g={x.grades} />
                 )}
               </div>
             </Link>

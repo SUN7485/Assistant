@@ -86,6 +86,11 @@ begin
   exception when raise_exception then if sqlerrm like 'FAIL:%' then raise; end if; end;
 
   begin
+    update grades set unclear = 6, blank = 5 where submission_id = '00000000-0000-0000-0000-0000000000f1';
+    raise exception 'FAIL: unclear and blank answers go past the homework''s questions';
+  exception when raise_exception then if sqlerrm like 'FAIL:%' then raise; end if; end;
+
+  begin
     update assignments set questions = 5 where id = '00000000-0000-0000-0000-0000000000e1';
     raise exception 'FAIL: a homework shrank below a grade already given';
   exception when raise_exception then if sqlerrm like 'FAIL:%' then raise; end if; end;
@@ -320,7 +325,12 @@ begin
   select created_at into seen from submissions where student_id = '00000000-0000-0000-0000-0000000000c3';
   assert grade_submission((select id from submissions where student_id = '00000000-0000-0000-0000-0000000000c3'), 6, 9, '', seen) = 'range', 'grading accepted more answers than questions';
   assert grade_submission((select id from submissions where student_id = '00000000-0000-0000-0000-0000000000c3'), 6, 2, 'ok', seen - interval '1 second') = 'changed', 'grading went onto pages the teacher had not seen';
+  assert grade_submission((select id from submissions where student_id = '00000000-0000-0000-0000-0000000000c3'), 6, 2, '', seen, 2, 1) = 'range', 'grading accepted more answers than questions, counting unclear and blank';
+  assert grade_submission((select id from submissions where student_id = '00000000-0000-0000-0000-0000000000c3'), 6, 1, '', seen, -1, 0) = 'range', 'grading accepted a negative unclear count';
   assert grade_submission((select id from submissions where student_id = '00000000-0000-0000-0000-0000000000c3'), 6, 2, 'ok', seen) = 'ok', 'teacher cannot grade in one step';
+  assert (select (unclear, blank) = (0, 0) from grades g join submissions s on s.id = g.submission_id where s.student_id = '00000000-0000-0000-0000-0000000000c3'), 'right and wrong alone did not leave unclear and blank at 0';
+  assert grade_submission((select id from submissions where student_id = '00000000-0000-0000-0000-0000000000c3'), 6, 1, 'ok', seen, 2, 1) = 'ok', 'teacher cannot grade with unclear and blank answers';
+  assert (select (correct, wrong, unclear, blank) = (6, 1, 2, 1) from grades g join submissions s on s.id = g.submission_id where s.student_id = '00000000-0000-0000-0000-0000000000c3'), 'unclear and blank were not kept';
   assert (select status from submissions where student_id = '00000000-0000-0000-0000-0000000000c3') = 'reviewed', 'grading did not mark the solution reviewed';
   assert grade_submission('00000000-0000-0000-0000-0000000000f3', 1, 9, '', now()) = 'missing', 'teacher reached work a shared student sent to another teacher';
   update grades set correct = 1 where submission_id = '00000000-0000-0000-0000-0000000000f3';

@@ -91,14 +91,14 @@ isOneToOne: false
                   ]
                 },"grades": {
                   Row: {
-                    "correct": number,"graded_at": string,"graded_by": string,"note": string,"submission_id": string,"wrong": number
+                    "blank": number,"correct": number,"graded_at": string,"graded_by": string,"note": string,"submission_id": string,"unclear": number,"wrong": number
                   }
                   ComputedFields: never
                   Insert: {
-                    "correct": number,"graded_at"?: string,"graded_by"?: string,"note"?: string,"submission_id": string,"wrong": number
+                    "blank"?: number,"correct": number,"graded_at"?: string,"graded_by"?: string,"note"?: string,"submission_id": string,"unclear"?: number,"wrong": number
                   }
                   Update: {
-                    "correct"?: number,"graded_at"?: string,"graded_by"?: string,"note"?: string,"submission_id"?: string,"wrong"?: number
+                    "blank"?: number,"correct"?: number,"graded_at"?: string,"graded_by"?: string,"note"?: string,"submission_id"?: string,"unclear"?: number,"wrong"?: number
                   }
                   Relationships: [
                     {
@@ -346,7 +346,7 @@ isOneToOne: false
 { Args: { "mail": string }; Returns: boolean
                            },
 "grade_submission":
-{ Args: { "n_correct": number,"n_wrong": number,"seen": string,"sub": string,"teacher_note": string }; Returns: string
+{ Args: { "n_blank"?: number,"n_correct": number,"n_unclear"?: number,"n_wrong": number,"seen": string,"sub": string,"teacher_note": string }; Returns: string
                            },
 "in_group":
 { Args: { "g": string }; Returns: boolean

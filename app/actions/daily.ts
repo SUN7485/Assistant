@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { can, getMe } from '@/lib/me'
 import { MAX_PAGES, pagesLabel } from '@/lib/pages'
-import { back, int, isDay, str, today } from '@/lib/util'
+import { back, int, isDay, scoreText, str, today } from '@/lib/util'
 import { staffOnly, tidyPhotos } from './shared'
 
 // ---------- attendance ----------
@@ -44,19 +44,21 @@ export async function grade(fd: FormData) {
   if (!sub) back('/grading', 'الحل ده مش موجود أو مش من طلابك', true)
   const q = sub.assignment.questions
   const correct = int(fd, 'correct'), wrong = int(fd, 'wrong')
-  if (!(correct >= 0 && wrong >= 0)) back(path, 'اكتب عدد الصح والغلط بأرقام', true)
-  if (correct + wrong > q) back(path, `الصح والغلط مع بعض أكتر من ${q} سؤال`, true)
+  const unclear = str(fd, 'unclear') === '' ? 0 : int(fd, 'unclear'), typed = str(fd, 'blank') === '' ? 0 : int(fd, 'blank')
+  if (!(correct >= 0 && wrong >= 0 && unclear >= 0 && typed >= 0)) back(path, 'اكتب عدد الصح والغلط وغير المفهوم والفاضي بأرقام', true)
+  if (correct + wrong + unclear + typed > q) back(path, `المجموع أكتر من ${q} سؤال`, true)
+  const blank = q - correct - wrong - unclear // questions not counted otherwise were left empty
   // One step in the database: the grade and "reviewed" together, and only if these are still the pages
   // that were on the teacher's screen (the student may send again until it is reviewed).
   const { data: result, error } = await sb.rpc('grade_submission', {
-    sub: id, n_correct: correct, n_wrong: wrong, teacher_note: str(fd, 'note').slice(0, 2000), seen: str(fd, 'seen'),
+    sub: id, n_correct: correct, n_wrong: wrong, n_unclear: unclear, n_blank: blank, teacher_note: str(fd, 'note').slice(0, 2000), seen: str(fd, 'seen'),
   })
   if (error) back(path, 'الدرجة مترصدتش: ' + error.message, true)
   if (result === 'changed') back(path, 'الطالب بعت صفحات جديدة وإنت بتصحح. راجعها وارصد الدرجة تاني', true)
-  if (result === 'range') back(path, `الصح والغلط مع بعض أكتر من ${q} سؤال`, true)
+  if (result === 'range') back(path, `المجموع أكتر من ${q} سؤال`, true)
   if (result !== 'ok') back('/grading', 'الحل ده مش موجود أو مش من طلابك', true)
   const { data: next } = await sb.from('submissions').select('id').eq('status', 'new').order('created_at').limit(1).maybeSingle()
-  const done = `اترصدت: ${correct} من ${correct + wrong}`
+  const done = 'اترصدت: ' + scoreText({ correct, wrong, unclear, blank })
   if (next) back(`/grading/${next.id}`, done + ' — ده الحل اللي بعده')
   back('/grading', done + ' — خلصت كل الحلول')
 }

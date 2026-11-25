@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { pagesLabel } from '../lib/pages'
-import { attendanceOf, average, count, feeOf, int, isDay, isId, isMonth, level, localPath, money, nStudents, pct, wa } from '../lib/util'
+import { attendanceOf, average, count, feeOf, int, isDay, isId, isMonth, level, localPath, money, nStudents, pct, scoreText, wa } from '../lib/util'
 
 const form = (o: Record<string, string>) => {
   const fd = new FormData()
@@ -13,6 +13,11 @@ describe('grades', () => {
     expect(pct(15, 5)).toBe(75)
     expect(pct(0, 0)).toBe(0) // nothing answered is not a crash
     expect(pct(57, 143)).toBe(29) // 28.5 rounds up, exactly as the database's student_stats does
+  })
+  it('leaves unclear and blank answers out of the percentage, and says them only when there are any', () => {
+    expect(scoreText({ correct: 15, wrong: 5, unclear: 0, blank: 0 })).toBe('15 من 20')
+    expect(scoreText({ correct: 6, wrong: 1, unclear: 2, blank: 1 })).toBe('6 من 7، 2 غير مفهوم، 1 فاضي')
+    expect(scoreText({ correct: 6, wrong: 1, unclear: 0, blank: 3 })).toBe('6 من 7، 3 فاضي')
   })
   it('charges the group\'s fee unless the student has a special one', () => {
     expect(feeOf({ monthly_fee: 300 })).toBe(300)

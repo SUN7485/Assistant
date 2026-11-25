@@ -32,8 +32,19 @@ export const fMonth = (m: string) =>
 
 // ---------- figures ----------
 export const money = (n: number) => n.toLocaleString('en') + ' ج.م'
-/** Right answers out of those answered, as a whole percentage. Written so that it rounds exactly as the database's student_stats does. */
+/** A grade's four counts. Unclear (غير مفهوم) is left for the teacher to look at; blank (فاضي) the student left empty. */
+export type Grade = { correct: number; wrong: number; unclear: number; blank: number }
+/**
+ * Right answers out of right and wrong ones (unclear and blank are left out), as a whole percentage.
+ * Written so that it rounds exactly as the database's student_stats does.
+ */
 export const pct = (correct: number, wrong: number) => Math.round((correct * 100) / Math.max(1, correct + wrong))
+/** A grade in words, for a message: "6 من 7، 2 غير مفهوم، 1 فاضي". */
+export function scoreText(g: Grade) {
+  return [`${g.correct} من ${g.correct + g.wrong}`, g.unclear ? `${g.unclear} غير مفهوم` : '', g.blank ? `${g.blank} فاضي` : '']
+    .filter(Boolean)
+    .join('، ')
+}
 export function level(p: number | null): [string, string] {
   if (p == null) return ['لسه مفيش درجات', '']
   if (p >= 85) return ['ممتاز', 'ok']

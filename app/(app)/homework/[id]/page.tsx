@@ -2,10 +2,11 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { can, need, isStaff } from '@/lib/me'
 import { deleteAssignment, saveAssignment } from '@/app/actions/groups'
+import { Score } from '@/components/Score'
 import { Submit } from '@/components/Submit'
 import { all } from '@/lib/data'
 import { pagesLabel } from '@/lib/pages'
-import { byName, dayOf, fDay, fTime, isId, nStudents, pct, wa } from '@/lib/util'
+import { byName, dayOf, fDay, fTime, isId, nStudents, wa } from '@/lib/util'
 
 /** One homework: who sent their solution, who has not yet, and a nudge for each of those. */
 export default async function Homework({ params }: { params: Promise<{ id: string }> }) {
@@ -16,7 +17,7 @@ export default async function Homework({ params }: { params: Promise<{ id: strin
   if (!w) notFound()
   const [roster, subs] = await Promise.all([
     all((a, b) => sb.from('enrollments').select('student:profiles(id, full_name, phone, parent_phone)', { count: 'exact' }).eq('group_id', w.group.id).order('student_id').range(a, b)),
-    all((a, b) => sb.from('submissions').select('id, student_id, status, created_at, photo_paths, grades(correct, wrong)', { count: 'exact' }).eq('assignment_id', id).order('id').range(a, b)),
+    all((a, b) => sb.from('submissions').select('id, student_id, status, created_at, photo_paths, grades(correct, wrong, unclear, blank)', { count: 'exact' }).eq('assignment_id', id).order('id').range(a, b)),
   ])
   const students = roster.map((r) => r.student).sort(byName)
   const sub = new Map(subs.map((s) => [s.student_id, s]))
@@ -69,7 +70,7 @@ export default async function Homework({ params }: { params: Promise<{ id: strin
                     <div className="muted small">{fTime(x.created_at)} · {pagesLabel(x.photo_paths.length)}</div>
                   </div>
                   {x.grades ? (
-                    <span className="score"><span className="ok">✓ {x.grades.correct}</span><span className="bad">✗ {x.grades.wrong}</span><b>{pct(x.grades.correct, x.grades.wrong)}%</b></span>
+                    <Score g={x.grades} />
                   ) : (
                     <span className="chip warn">مستني تصحيح</span>
                   )}
