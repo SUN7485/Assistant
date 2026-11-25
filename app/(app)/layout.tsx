@@ -1,8 +1,6 @@
 import Link from 'next/link'
 import { getMe, type Me } from '@/lib/me'
-import { MIGRATION, SCHEMA, schemaBehind } from '@/lib/schema'
-import { sql } from '@/lib/sql'
-import { CopyButton } from '@/components/CopyButton'
+import { schemaBehind } from '@/lib/schema'
 import { Nav } from '@/components/Nav'
 import { logout } from '@/app/actions/auth'
 
@@ -32,30 +30,18 @@ function items(me: Me, newWork: number) {
   ]
 }
 
-/** The code was deployed before its database change was run: say so plainly instead of failing page by page. */
-async function Behind({ me, by }: { me: Me; by: number }) {
-  const files = Object.entries(MIGRATION).filter(([v]) => Number(v) > SCHEMA - by).map(([, f]) => f)
-  const text = me.role === 'admin' ? (await Promise.all(files.map((f) => sql('migrations', f)))).join('\n\n') : ''
+/**
+ * The code was deployed before its database change was run: say so plainly instead of failing page by page.
+ * Running the change is the developer's job, so nobody here is shown files or steps.
+ */
+function Behind() {
   return (
     <main className="wrap login">
       <div className="hero">
         <span className="mark big">!</span>
         <h1>المنصة بتتحدّث</h1>
       </div>
-      {me.role === 'admin' ? (
-        <div className="panel">
-          <p>نسخة المنصة الجديدة اشتغلت، وقاعدة البيانات لسه على القديم. علشان تكمّل:</p>
-          <ol className="steps">
-            <li>{text ? <CopyButton text={text} label="انسخ ملف التحديث" /> : <>افتح {files.length > 1 ? 'الملفات دي بالترتيب' : 'الملف ده'} من فولدر <span dir="ltr">supabase/migrations</span>: {files.map((f) => <b key={f} dir="ltr"> {f} </b>)}</>}</li>
-            <li>افتح Supabase ← SQL Editor، الصق اللي نسخته، واضغط Run واستنى <span dir="ltr">Success</span>.</li>
-            <li>ارجع هنا وحدّث الصفحة.</li>
-          </ol>
-          {text && <p className="muted small">الملف اسمه <span dir="ltr">{files.join(' , ')}</span> في فولدر <span dir="ltr">supabase/migrations</span>.</p>}
-          <p className="muted small">لحد ما ده يتعمل، الطلاب والمدرسين شايفين إن المنصة بتتحدّث.</p>
-        </div>
-      ) : (
-        <p className="panel">بنحدّث المنصة دلوقتي. جرّب تاني كمان شوية.</p>
-      )}
+      <p className="panel">بنحدّث المنصة دلوقتي. جرّب تاني كمان شوية.</p>
       <form action={logout}><button className="link">خروج</button></form>
     </main>
   )
@@ -67,7 +53,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     schemaBehind(sb),
     me.role === 'student' ? null : sb.from('submissions').select('id', { count: 'exact', head: true }).eq('status', 'new'),
   ])
-  if (behind) return <Behind me={me} by={behind} />
+  if (behind) return <Behind />
   const who = me.role === 'admin' ? 'مدير المنصة' : me.role === 'teacher' ? `${me.full_name}${me.subject ? ' · ' + me.subject : ''}` : me.full_name
   return (
     <>

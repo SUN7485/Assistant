@@ -5,8 +5,6 @@ import type { Db } from './supabase'
  * relies on raises schema_version() in the database; raise this with it.
  */
 export const SCHEMA = 5
-/** The file that brings the database to each version, for the message the manager sees. */
-export const MIGRATION: Record<number, string> = { 4: '20261124000000_enrollments.sql', 5: '20261125000000_unclear_blank.sql' }
 
 let okUntil = 0
 

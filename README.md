@@ -48,7 +48,7 @@ Built with Next.js (on Vercel) and Supabase (database, logins, photo storage). S
 5. Give each student the link plus their phone number and password. On the phone they open the link, sign in, and choose **Add to Home Screen**. They can change their password under **حسابي**.
 
 ### Updating later
-When a new version changes the database, deploy the code first. Until the database is brought up to date, the app shows everyone "المنصة بتتحدّث", and shows the **manager** a copy button for exactly the file to run in Supabase SQL Editor. Run it, refresh, done. Nothing else needs to be remembered.
+When a new version changes the database, the developer runs its new file from `supabase/migrations/` in Supabase SQL Editor, ideally before the code goes live. If the code gets there first, everyone (the manager included) just sees "المنصة بتتحدّث" until the file is run; nobody using the platform is shown SQL or steps.
 
 ### Costs
 Both services are free while testing. For real use, plan on Supabase **Pro (about $25/month)**, because free projects pause after a week with no activity. Vercel's free Hobby plan is for non-commercial use, so a paying client should use **Vercel Pro (about $20/month)**. Check current prices on both sites.
@@ -77,7 +77,7 @@ npm run db:reset && npm run build && (npm start &) && npm run test:walk
 
 A database change:
 
-1. Add a **new** file under `supabase/migrations/` (never edit one that has been released). If the app cannot work without it, raise the number in its `schema_version()` and in `lib/schema.ts`, and add the file's name there, so a deployed app can tell the manager to run it.
+1. Add a **new** file under `supabase/migrations/` (never edit one that has been released). If the app cannot work without it, raise the number in its `schema_version()` and `SCHEMA` in `lib/schema.ts`, so a deployed app waits for it instead of failing page by page. Run it on the live project in Supabase SQL Editor.
 2. `npm run db:reset`, then `npm run db:types` (TypeScript types for the tables) and `npm run db:bundle` (`supabase/install.sql` for new projects).
 3. Add a check to `supabase/tests/rls.sql` when it touches who can see what.
 
